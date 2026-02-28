@@ -1,5 +1,5 @@
 --[[
-	CombatFeedback — hit markers, screen shake on damage, kill flash.
+	CombatFeedback — hit markers, screen shake scaled to damage, kill flash.
 	Listens to server-confirmed hits and player damage events.
 ]]
 
@@ -19,11 +19,10 @@ local camera = workspace.CurrentCamera
 
 local hitMarkerGui = nil
 local killFlashGui = nil
-local shakeOffset = CFrame.identity
 local shakeEndTime = 0
 local shakeIntensity = 0
+local shakeDuration = 0
 
--- Hit marker UI (crosshair flash)
 local function createHitMarkerUI()
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "HitMarkerUI"
@@ -34,7 +33,6 @@ local function createHitMarkerUI()
 
 	local size = Config.Weapon.HitMarkerSize
 
-	-- Four lines forming an X centered on screen
 	local container = Instance.new("Frame")
 	container.Name = "Marker"
 	container.Size = UDim2.new(0, size * 2, 0, size * 2)
@@ -44,10 +42,10 @@ local function createHitMarkerUI()
 	container.Parent = gui
 
 	local lineData = {
-		{ UDim2.new(0.5, -1, 0, 0),       UDim2.new(0, 3, 0.3, 0), 25 },  -- top
-		{ UDim2.new(0.5, -1, 0.7, 0),      UDim2.new(0, 3, 0.3, 0), 25 },  -- bottom
-		{ UDim2.new(0, 0, 0.5, -1),         UDim2.new(0.3, 0, 0, 3), 25 },  -- left
-		{ UDim2.new(0.7, 0, 0.5, -1),       UDim2.new(0.3, 0, 0, 3), 25 },  -- right
+		{ UDim2.new(0.5, -1, 0, 0),   UDim2.new(0, 3, 0.3, 0), 25 },
+		{ UDim2.new(0.5, -1, 0.7, 0), UDim2.new(0, 3, 0.3, 0), 25 },
+		{ UDim2.new(0, 0, 0.5, -1),   UDim2.new(0.3, 0, 0, 3), 25 },
+		{ UDim2.new(0.7, 0, 0.5, -1), UDim2.new(0.3, 0, 0, 3), 25 },
 	}
 
 	for _, data in lineData do
@@ -93,7 +91,6 @@ local function showHitMarker(isHeadshot: boolean)
 		return
 	end
 
-	-- Set colour
 	for _, child in hitMarkerGui:GetChildren() do
 		if child:IsA("Frame") then
 			if isHeadshot then
@@ -106,7 +103,6 @@ local function showHitMarker(isHeadshot: boolean)
 
 	hitMarkerGui.Visible = true
 
-	-- Scale pop effect
 	hitMarkerGui.Size = UDim2.new(0, 60, 0, 60)
 	hitMarkerGui.Position = UDim2.new(0.5, -30, 0.5, -30)
 
@@ -134,9 +130,20 @@ local function showKillFlash()
 	}):Play()
 end
 
-local function triggerScreenShake(intensity: number, duration: number)
-	shakeIntensity = intensity
-	shakeEndTime = tick() + duration
+local function triggerScreenShake(damage: number)
+	-- Scale intensity with damage amount
+	local intensity = damage * Config.Weapon.ScreenShakePerDamage
+	intensity = math.clamp(intensity, Config.Weapon.ScreenShakeMin, Config.Weapon.ScreenShakeMax)
+
+	-- If already shaking, use the stronger intensity
+	if tick() < shakeEndTime then
+		shakeIntensity = math.max(shakeIntensity, intensity)
+	else
+		shakeIntensity = intensity
+	end
+
+	shakeDuration = Config.Weapon.ScreenShakeDuration
+	shakeEndTime = tick() + shakeDuration
 end
 
 function CombatFeedback.init()
@@ -155,22 +162,24 @@ function CombatFeedback.init()
 		end
 	)
 
-	-- Player took damage (screen shake)
-	remotes:WaitForChild(RemoteNames.PlayerDamaged).OnClientEvent:Connect(function(_damage)
-		triggerScreenShake(Config.Weapon.ScreenShakeIntensity, Config.Weapon.ScreenShakeDuration)
+	-- Player took damage — screen shake scaled to damage
+	remotes:WaitForChild(RemoteNames.PlayerDamaged).OnClientEvent:Connect(function(damage)
+		triggerScreenShake(damage)
 	end)
 
 	-- Screen shake render loop
 	RunService.RenderStepped:Connect(function(_dt)
+		camera = workspace.CurrentCamera
+
 		if tick() < shakeEndTime then
-			local t = (shakeEndTime - tick()) / Config.Weapon.ScreenShakeDuration
+			local remaining = shakeEndTime - tick()
+			local t = remaining / shakeDuration
 			local mag = shakeIntensity * t
-			shakeOffset = CFrame.new(
+			camera.CFrame = camera.CFrame * CFrame.new(
 				(math.random() - 0.5) * mag,
 				(math.random() - 0.5) * mag,
 				0
 			)
-			camera.CFrame = camera.CFrame * shakeOffset
 		end
 	end)
 end

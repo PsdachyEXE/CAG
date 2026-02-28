@@ -1,7 +1,7 @@
 --[[
 	ExtractionServer — manages a circular extraction zone.
 	Players stand in the zone for Config.Extraction.Duration seconds to extract.
-	Triggers round-end on successful extraction.
+	Triggers round-end on successful extraction. Includes wave reached in results.
 ]]
 
 local Players = game:GetService("Players")
@@ -16,6 +16,9 @@ local ExtractionServer = {}
 
 local extractionZone = nil
 local playersExtracting = {} -- [player] = startTick
+
+-- Reference to AIServer for wave tracking (set during init)
+local AIServer = nil
 
 local function createExtractionZone()
 	local radius = Config.Extraction.ZoneRadius
@@ -81,8 +84,8 @@ local function createExtractionZone()
 	return zone
 end
 
-local function isPlayerInZone(player: Player): boolean
-	local character = player.Character
+local function isPlayerInZone(plr: Player): boolean
+	local character = plr.Character
 	if not character then
 		return false
 	end
@@ -104,55 +107,70 @@ local function isPlayerInZone(player: Player): boolean
 		and math.abs(playerPos.Y - zonePos.Y) <= 8 -- vertical tolerance
 end
 
-local function onRoundEnd(player: Player, extracted: boolean)
-	local remotes = ReplicatedStorage:WaitForChild("RemoteEvents")
-	local roundEndRemote = remotes:WaitForChild(RemoteNames.RoundEnd)
+local function getWaveReached(): number
+	if AIServer and AIServer.getCurrentWave then
+		return AIServer.getCurrentWave()
+	end
+	return 0
+end
+
+local function onRoundEnd(plr: Player, extracted: boolean)
+	local roundRemotes = ReplicatedStorage:WaitForChild("RemoteEvents")
+	local roundEndRemote = roundRemotes:WaitForChild(RemoteNames.RoundEnd)
 
 	roundEndRemote:FireAllClients({
-		playerName = player.Name,
+		playerName = plr.Name,
 		extracted = extracted,
 		xp = Config.Round.XPPlaceholder,
 		loot = Config.Round.LootPlaceholder,
 		streak = Config.Round.StreakPlaceholder,
+		waveReached = getWaveReached(),
 	})
 
-	print("[CAG] Round ended — " .. player.Name .. (extracted and " extracted!" or " died."))
+	print("[CAG] Round ended — " .. plr.Name .. (extracted and " extracted!" or " died.") .. " (wave " .. getWaveReached() .. ")")
 end
 
 function ExtractionServer.init()
+	-- Get reference to AIServer for wave tracking
+	local serverModules = script.Parent
+	local aiModule = serverModules:FindFirstChild("AIServer")
+	if aiModule then
+		AIServer = require(aiModule)
+	end
+
 	extractionZone = createExtractionZone()
 
-	local remotes = ReplicatedStorage:WaitForChild("RemoteEvents")
-	local progressRemote = remotes:WaitForChild(RemoteNames.ExtractionProgress)
-	local completeRemote = remotes:WaitForChild(RemoteNames.ExtractionComplete)
-	local cancelRemote = remotes:WaitForChild(RemoteNames.ExtractionCancel)
+	local extractRemotes = ReplicatedStorage:WaitForChild("RemoteEvents")
+	local progressRemote = extractRemotes:WaitForChild(RemoteNames.ExtractionProgress)
+	local completeRemote = extractRemotes:WaitForChild(RemoteNames.ExtractionComplete)
+	local cancelRemote = extractRemotes:WaitForChild(RemoteNames.ExtractionCancel)
 
 	-- Monitor players in zone
 	task.spawn(function()
 		while true do
-			for _, player in Players:GetPlayers() do
-				local inZone = isPlayerInZone(player)
+			for _, plr in Players:GetPlayers() do
+				local inZone = isPlayerInZone(plr)
 
 				if inZone then
-					if not playersExtracting[player] then
-						playersExtracting[player] = tick()
-						remotes:WaitForChild(RemoteNames.ExtractionStart):FireClient(player)
+					if not playersExtracting[plr] then
+						playersExtracting[plr] = tick()
+						extractRemotes:WaitForChild(RemoteNames.ExtractionStart):FireClient(plr)
 					else
-						local elapsed = tick() - playersExtracting[player]
+						local elapsed = tick() - playersExtracting[plr]
 						local progress = math.clamp(elapsed / Config.Extraction.Duration, 0, 1)
 
-						progressRemote:FireClient(player, progress)
+						progressRemote:FireClient(plr, progress)
 
 						if progress >= 1 then
-							playersExtracting[player] = nil
-							completeRemote:FireClient(player)
-							onRoundEnd(player, true)
+							playersExtracting[plr] = nil
+							completeRemote:FireClient(plr)
+							onRoundEnd(plr, true)
 						end
 					end
 				else
-					if playersExtracting[player] then
-						playersExtracting[player] = nil
-						cancelRemote:FireClient(player)
+					if playersExtracting[plr] then
+						playersExtracting[plr] = nil
+						cancelRemote:FireClient(plr)
 					end
 				end
 			end
@@ -162,21 +180,21 @@ function ExtractionServer.init()
 	end)
 
 	-- Handle player death during extraction
-	Players.PlayerAdded:Connect(function(player)
-		player.CharacterAdded:Connect(function(character)
+	Players.PlayerAdded:Connect(function(plr)
+		plr.CharacterAdded:Connect(function(character)
 			local humanoid = character:WaitForChild("Humanoid")
 			humanoid.Died:Connect(function()
-				if playersExtracting[player] then
-					playersExtracting[player] = nil
+				if playersExtracting[plr] then
+					playersExtracting[plr] = nil
 				end
-				onRoundEnd(player, false)
+				onRoundEnd(plr, false)
 			end)
 		end)
 	end)
 
 	-- Cleanup on leave
-	Players.PlayerRemoving:Connect(function(player)
-		playersExtracting[player] = nil
+	Players.PlayerRemoving:Connect(function(plr)
+		playersExtracting[plr] = nil
 	end)
 
 	print("[CAG] Extraction system initialized")

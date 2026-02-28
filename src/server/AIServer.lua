@@ -1,6 +1,7 @@
 --[[
-	AIServer — spawns AI enemies in waves, handles pathfinding with flanking,
-	stagger on hit, death scatter effect, and wave-based respawning.
+	AIServer — spawns AI enemies in waves, handles pathfinding with stuck detection,
+	separation steering, flanking after LOS timeout, stagger on hit, death scatter,
+	and wave-based scaling (size + speed).
 ]]
 
 local Players = game:GetService("Players")
@@ -14,8 +15,13 @@ local AIServer = {}
 
 local activeAIs = {}
 local remotes
+local currentWave = 0
 
-local function createAIModel()
+function AIServer.getCurrentWave(): number
+	return currentWave
+end
+
+local function createAIModel(waveNumber: number)
 	local model = Instance.new("Model")
 	model.Name = "AIEnemy"
 
@@ -70,29 +76,33 @@ local function createAIModel()
 		weld.Parent = torso
 	end
 
+	-- Scale speed with wave number
+	local speedBonus = (waveNumber - 1) * Config.AI.SpeedScalePerWave
+	local moveSpeed = Config.AI.MoveSpeed + speedBonus
+
 	local humanoid = Instance.new("Humanoid")
 	humanoid.MaxHealth = Config.AI.Health
 	humanoid.Health = Config.AI.Health
-	humanoid.WalkSpeed = Config.AI.MoveSpeed
+	humanoid.WalkSpeed = moveSpeed
 	humanoid.Parent = model
 
 	model.PrimaryPart = torso
-	return model
+	return model, moveSpeed
 end
 
 local function getClosestPlayer(aiPosition: Vector3): Player?
 	local closest = nil
 	local closestDist = Config.AI.DetectionRange
 
-	for _, player in Players:GetPlayers() do
-		local character = player.Character
+	for _, plr in Players:GetPlayers() do
+		local character = plr.Character
 		if character then
 			local hrp = character:FindFirstChild("HumanoidRootPart")
 			local hum = character:FindFirstChildOfClass("Humanoid")
 			if hrp and hum and hum.Health > 0 then
 				local dist = (hrp.Position - aiPosition).Magnitude
 				if dist < closestDist then
-					closest = player
+					closest = plr
 					closestDist = dist
 				end
 			end
@@ -113,7 +123,6 @@ local function hasLineOfSight(from: Vector3, to: Vector3, ignoreModel: Model): b
 		return true
 	end
 
-	-- Check if what we hit is the target character
 	local hitModel = result.Instance:FindFirstAncestorOfClass("Model")
 	if hitModel and hitModel:FindFirstChildOfClass("Humanoid") then
 		return true
@@ -130,12 +139,37 @@ local function getFlankPosition(aiPos: Vector3, targetPos: Vector3): Vector3
 	end
 	flatDir = flatDir.Unit
 
-	-- Pick a random flank side (left or right)
 	local sign = math.random() > 0.5 and 1 or -1
 	local angle = math.rad(Config.AI.FlankAngle * sign)
 	local rotatedDir = CFrame.Angles(0, angle, 0):VectorToWorldSpace(flatDir)
 
 	return targetPos - rotatedDir * Config.AI.FlankDistance
+end
+
+-- Separation steering: push AI away from nearby AI
+local function getSeparationForce(aiData): Vector3
+	local rootPart = aiData.model.PrimaryPart
+	if not rootPart then
+		return Vector3.zero
+	end
+
+	local myPos = rootPart.Position
+	local force = Vector3.zero
+
+	for _, other in activeAIs do
+		if other ~= aiData and other.alive then
+			local otherRoot = other.model.PrimaryPart
+			if otherRoot then
+				local diff = myPos - otherRoot.Position
+				local dist = diff.Magnitude
+				if dist < Config.AI.SeparationDistance and dist > 0.1 then
+					force = force + diff.Unit * (Config.AI.SeparationForce / dist)
+				end
+			end
+		end
+	end
+
+	return force
 end
 
 local function runAI(aiData)
@@ -147,9 +181,27 @@ local function runAI(aiData)
 		return
 	end
 
-	-- Stagger check — skip movement while staggered
+	-- Stagger check
 	if aiData.staggerUntil and tick() < aiData.staggerUntil then
 		return
+	end
+
+	-- Stuck detection: compare position to 2 seconds ago
+	local now = tick()
+	if aiData.lastStuckCheck then
+		if now - aiData.lastStuckCheck >= Config.AI.StuckTimeout then
+			local dist = (rootPart.Position - aiData.lastStuckPos).Magnitude
+			if dist < Config.AI.StuckThreshold then
+				-- Stuck — jump and force re-path
+				humanoid.Jump = true
+				aiData.lastPathfind = 0 -- force new path
+			end
+			aiData.lastStuckCheck = now
+			aiData.lastStuckPos = rootPart.Position
+		end
+	else
+		aiData.lastStuckCheck = now
+		aiData.lastStuckPos = rootPart.Position
 	end
 
 	local target = getClosestPlayer(rootPart.Position)
@@ -166,13 +218,12 @@ local function runAI(aiData)
 
 	-- Attack if in range
 	if distance <= Config.AI.AttackRange then
-		if tick() - aiData.lastAttack >= Config.AI.AttackCooldown then
-			aiData.lastAttack = tick()
+		if now - aiData.lastAttack >= Config.AI.AttackCooldown then
+			aiData.lastAttack = now
 			local targetHumanoid = target.Character:FindFirstChildOfClass("Humanoid")
 			if targetHumanoid and targetHumanoid.Health > 0 then
 				targetHumanoid:TakeDamage(Config.AI.AttackDamage)
 
-				-- Notify client for screen shake
 				local targetPlayer = Players:GetPlayerFromCharacter(target.Character)
 				if targetPlayer then
 					remotes:WaitForChild(RemoteNames.PlayerDamaged):FireClient(
@@ -185,19 +236,35 @@ local function runAI(aiData)
 		return
 	end
 
-	-- Pathfind
-	if tick() - aiData.lastPathfind < Config.AI.PathfindingInterval then
+	-- Pathfind interval check
+	if now - aiData.lastPathfind < Config.AI.PathfindingInterval then
 		return
 	end
-	aiData.lastPathfind = tick()
+	aiData.lastPathfind = now
 
-	-- Determine destination: direct or flank
+	-- Determine destination: direct, flank, or separation-adjusted
 	local destination = targetHRP.Position
 	local canSee = hasLineOfSight(rootPart.Position, targetHRP.Position, model)
 
-	if not canSee then
-		-- Lost LOS — flank around
-		destination = getFlankPosition(rootPart.Position, targetHRP.Position)
+	if canSee then
+		-- Reset LOS lost timer when we can see the target
+		aiData.losLostTime = nil
+	else
+		-- Track how long LOS has been lost
+		if not aiData.losLostTime then
+			aiData.losLostTime = now
+		end
+
+		-- Only flank after LOS lost for FlankLOSTimeout seconds
+		if now - aiData.losLostTime >= Config.AI.FlankLOSTimeout then
+			destination = getFlankPosition(rootPart.Position, targetHRP.Position)
+		end
+	end
+
+	-- Apply separation steering to destination
+	local sepForce = getSeparationForce(aiData)
+	if sepForce.Magnitude > 0.1 then
+		destination = destination + Vector3.new(sepForce.X, 0, sepForce.Z)
 	end
 
 	local path = PathfindingService:CreatePath({
@@ -216,7 +283,6 @@ local function runAI(aiData)
 			if humanoid.Health <= 0 then
 				break
 			end
-			-- Abort if staggered mid-path
 			if aiData.staggerUntil and tick() < aiData.staggerUntil then
 				break
 			end
@@ -227,6 +293,7 @@ local function runAI(aiData)
 			humanoid.MoveToFinished:Wait()
 		end
 	else
+		-- Fallback: move directly toward target
 		humanoid:MoveTo(destination)
 	end
 end
@@ -239,10 +306,9 @@ local function scatterDeathParts(model: Model)
 
 	local origin = rootPart.Position
 
-	-- Collect all parts, break welds, scatter
+	-- Break welds on all non-root parts
 	for _, part in model:GetDescendants() do
 		if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
-			-- Remove welds
 			for _, child in part:GetChildren() do
 				if child:IsA("Weld") or child:IsA("WeldConstraint") then
 					child:Destroy()
@@ -251,7 +317,7 @@ local function scatterDeathParts(model: Model)
 		end
 	end
 
-	-- Break all welds on root too
+	-- Break welds on root
 	for _, child in rootPart:GetChildren() do
 		if child:IsA("Weld") or child:IsA("WeldConstraint") then
 			child:Destroy()
@@ -280,7 +346,6 @@ local function scatterDeathParts(model: Model)
 
 			part:ApplyImpulse(scatter * part.Mass)
 
-			-- Spin
 			part:ApplyAngularImpulse(Vector3.new(
 				(math.random() - 0.5) * 30,
 				(math.random() - 0.5) * 30,
@@ -307,20 +372,19 @@ local function applyStagger(aiData)
 
 	aiData.staggerUntil = tick() + Config.AI.StaggerDuration
 
-	-- Slow down during stagger
-	local originalSpeed = Config.AI.MoveSpeed
-	humanoid.WalkSpeed = originalSpeed * Config.AI.StaggerSpeedMult
+	local baseSpeed = aiData.moveSpeed or Config.AI.MoveSpeed
+	humanoid.WalkSpeed = baseSpeed * Config.AI.StaggerSpeedMult
 
 	task.spawn(function()
 		task.wait(Config.AI.StaggerDuration)
 		if humanoid and humanoid.Parent and humanoid.Health > 0 then
-			humanoid.WalkSpeed = originalSpeed
+			humanoid.WalkSpeed = baseSpeed
 		end
 	end)
 end
 
-local function spawnAI(position: Vector3)
-	local model = createAIModel()
+local function spawnAI(position: Vector3, waveNumber: number)
+	local model, moveSpeed = createAIModel(waveNumber)
 	model:PivotTo(CFrame.new(position + Vector3.new(0, 3, 0)))
 	model.Parent = workspace
 
@@ -328,10 +392,14 @@ local function spawnAI(position: Vector3)
 
 	local aiData = {
 		model = model,
+		moveSpeed = moveSpeed,
 		lastAttack = 0,
 		lastPathfind = 0,
 		staggerUntil = 0,
 		alive = true,
+		losLostTime = nil,
+		lastStuckCheck = nil,
+		lastStuckPos = nil,
 	}
 
 	table.insert(activeAIs, aiData)
@@ -350,10 +418,8 @@ local function spawnAI(position: Vector3)
 		aiData.alive = false
 		remotes:WaitForChild(RemoteNames.AIDied):FireAllClients(model)
 
-		-- Scatter death effect
 		scatterDeathParts(model)
 
-		-- Remove from active list
 		for i, data in activeAIs do
 			if data == aiData then
 				table.remove(activeAIs, i)
@@ -372,8 +438,10 @@ local function spawnAI(position: Vector3)
 end
 
 local function spawnWave()
+	currentWave += 1
+	local waveSize = Config.AI.WaveBaseSize + (currentWave - 1) * Config.AI.WaveGrowth
 	local positions = Config.AI.SpawnPositions
-	local waveSize = math.min(Config.AI.WaveSize, #positions)
+	waveSize = math.min(waveSize, #positions)
 
 	-- Shuffle and pick spawn points
 	local shuffled = table.clone(positions)
@@ -383,10 +451,10 @@ local function spawnWave()
 	end
 
 	for i = 1, waveSize do
-		spawnAI(shuffled[i])
+		spawnAI(shuffled[i], currentWave)
 	end
 
-	print("[CAG] AI wave spawned: " .. waveSize .. " enemies")
+	print("[CAG] Wave " .. currentWave .. " spawned: " .. waveSize .. " enemies (speed +" .. ((currentWave - 1) * Config.AI.SpeedScalePerWave) .. ")")
 end
 
 function AIServer.init()

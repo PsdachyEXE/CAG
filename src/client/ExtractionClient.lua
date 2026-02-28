@@ -2,7 +2,7 @@
 	ExtractionClient — cartoon-style extraction countdown UI.
 	On enter: big countdown timer (5, 4, 3, 2, 1).
 	On complete: screen goes white, "EXTRACTED" slams onto screen,
-	2 second pause, then results screen appears via RoundEnd remote.
+	1.5 second hold, then results screen appears via RoundEnd remote.
 	Countdown interrupted if player leaves zone.
 ]]
 
@@ -185,7 +185,8 @@ local function playExtractionComplete()
 		Rotation = 0,
 	}):Play()
 
-	task.wait(2)
+	-- 1.5 second hold
+	task.wait(1.5)
 
 	-- Fade everything out
 	TweenService:Create(whiteFlash, TweenInfo.new(0.5, Enum.EasingStyle.Quad), {

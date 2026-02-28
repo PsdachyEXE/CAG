@@ -4,10 +4,11 @@ local Config = {}
 Config.Slide = {
 	Duration = 0.8,
 	SpeedMultiplier = 1.8,
-	Cooldown = 1.2,
+	Cooldown = 1.0,
 	CameraTiltAngle = 8,
 	FrictionDecel = 0.92,
 	MinSpeed = 4,
+	CrouchSpeed = 8,
 	KeyCode = Enum.KeyCode.LeftControl,
 }
 
@@ -19,6 +20,7 @@ Config.Weapon = {
 	HeadshotMultiplier = 2,
 	MagSize = 30,
 	ReloadTime = 1.8,
+	ReloadTiltAngle = 12,
 	HitHighlightColor = Color3.fromRGB(255, 80, 80),
 	HitHighlightDuration = 0.15,
 	DamageNumberLifetime = 1.0,
@@ -27,9 +29,14 @@ Config.Weapon = {
 	SpreadAngle = 1.5,
 	HitMarkerDuration = 0.12,
 	HitMarkerSize = 24,
-	ScreenShakeIntensity = 0.4,
+	ScreenShakePerDamage = 0.025,
+	ScreenShakeMin = 0.15,
+	ScreenShakeMax = 0.8,
 	ScreenShakeDuration = 0.15,
 	KillFlashDuration = 0.2,
+	SwayAmount = 0.3,
+	SwaySpeed = 8,
+	SwayReturnSpeed = 6,
 }
 
 -- AI
@@ -43,12 +50,19 @@ Config.AI = {
 	PathfindingInterval = 0.5,
 	FlankAngle = 70,
 	FlankDistance = 15,
+	FlankLOSTimeout = 3,
 	StaggerDuration = 0.4,
 	StaggerSpeedMult = 0.2,
 	DeathScatterForce = 40,
-	DeathScatterLifetime = 3,
+	DeathScatterLifetime = 2,
 	WaveInterval = 30,
-	WaveSize = 4,
+	WaveBaseSize = 3,
+	WaveGrowth = 1,
+	SpeedScalePerWave = 0.5,
+	StuckTimeout = 2,
+	StuckThreshold = 1,
+	SeparationDistance = 5,
+	SeparationForce = 8,
 	SpawnPositions = {
 		Vector3.new(50, 0, 50),
 		Vector3.new(-50, 0, 50),

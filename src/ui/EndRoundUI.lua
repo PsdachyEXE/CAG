@@ -1,7 +1,7 @@
 --[[
 	EndRoundUI — cartoon-style results screen.
 	Bold, chunky fonts. Bright colour palette (yellows, oranges, whites).
-	Shows: status, XP (animated counter), loot, streak, PLAY AGAIN button.
+	Shows: status, XP (animated counter), wave reached, loot, streak, PLAY AGAIN button.
 	Each element slides in with staggered animations.
 ]]
 
@@ -53,11 +53,11 @@ local function createEndRoundScreen()
 	bg.BackgroundTransparency = 1
 	bg.Parent = gui
 
-	-- Main card
+	-- Main card (taller to fit wave row)
 	local card = Instance.new("Frame")
 	card.Name = "Card"
 	card.AnchorPoint = Vector2.new(0.5, 0.5)
-	card.Size = UDim2.new(0, 550, 0, 520)
+	card.Size = UDim2.new(0, 550, 0, 580)
 	card.Position = UDim2.new(0.5, 0, 0.5, 0)
 	card.BackgroundColor3 = Color3.fromRGB(25, 25, 40)
 	card.BackgroundTransparency = 0.05
@@ -127,6 +127,28 @@ local function createEndRoundScreen()
 	})
 	xpValue.Name = "XPValue"
 
+	-- Wave reached section
+	local waveTitle = makeLabel(card, {
+		text = "WAVE REACHED",
+		textSize = 14,
+		font = Enum.Font.GothamBold,
+		color = Color3.fromRGB(180, 180, 200),
+		strokeTransparency = 0.6,
+		size = UDim2.new(1, 0, 0, 22),
+		position = UDim2.new(0, 0, 0, 225),
+	})
+	waveTitle.Name = "WaveTitle"
+
+	local waveValue = makeLabel(card, {
+		text = "Wave 1",
+		textSize = 34,
+		color = Color3.fromRGB(100, 200, 255),
+		strokeColor = Color3.fromRGB(20, 60, 100),
+		size = UDim2.new(1, 0, 0, 44),
+		position = UDim2.new(0, 0, 0, 245),
+	})
+	waveValue.Name = "WaveValue"
+
 	-- Streak section
 	local streakTitle = makeLabel(card, {
 		text = "STREAK",
@@ -135,7 +157,7 @@ local function createEndRoundScreen()
 		color = Color3.fromRGB(180, 180, 200),
 		strokeTransparency = 0.6,
 		size = UDim2.new(1, 0, 0, 22),
-		position = UDim2.new(0, 0, 0, 225),
+		position = UDim2.new(0, 0, 0, 295),
 	})
 	streakTitle.Name = "StreakTitle"
 
@@ -145,7 +167,7 @@ local function createEndRoundScreen()
 		color = Color3.fromRGB(255, 140, 40),
 		strokeColor = Color3.fromRGB(100, 50, 0),
 		size = UDim2.new(1, 0, 0, 44),
-		position = UDim2.new(0, 0, 0, 245),
+		position = UDim2.new(0, 0, 0, 315),
 	})
 	streakValue.Name = "StreakValue"
 
@@ -157,7 +179,7 @@ local function createEndRoundScreen()
 		color = Color3.fromRGB(180, 180, 200),
 		strokeTransparency = 0.6,
 		size = UDim2.new(1, 0, 0, 22),
-		position = UDim2.new(0, 0, 0, 298),
+		position = UDim2.new(0, 0, 0, 368),
 	})
 	lootTitle.Name = "LootTitle"
 
@@ -168,7 +190,7 @@ local function createEndRoundScreen()
 		color = Color3.fromRGB(230, 230, 240),
 		strokeTransparency = 0.4,
 		size = UDim2.new(0.8, 0, 0, 70),
-		position = UDim2.new(0.1, 0, 0, 320),
+		position = UDim2.new(0.1, 0, 0, 390),
 	})
 	lootList.Name = "LootList"
 	lootList.TextYAlignment = Enum.TextYAlignment.Top
@@ -197,8 +219,8 @@ local function createEndRoundScreen()
 	btnStroke.Parent = playBtn
 
 	playBtn.MouseButton1Click:Connect(function()
-		local remotes = ReplicatedStorage:WaitForChild("RemoteEvents")
-		local playAgainRemote = remotes:FindFirstChild(RemoteNames.PlayAgain)
+		local btnRemotes = ReplicatedStorage:WaitForChild("RemoteEvents")
+		local playAgainRemote = btnRemotes:FindFirstChild(RemoteNames.PlayAgain)
 		if playAgainRemote then
 			playAgainRemote:FireServer()
 		end
@@ -230,6 +252,8 @@ local function createEndRoundScreen()
 		divider = divider,
 		xpTitle = xpTitle,
 		xpValue = xpValue,
+		waveTitle = waveTitle,
+		waveValue = waveValue,
 		streakTitle = streakTitle,
 		streakValue = streakValue,
 		lootTitle = lootTitle,
@@ -306,6 +330,7 @@ local function showEndRound(data)
 	local header = elements.header
 	local nameLabel = elements.nameLabel
 	local xpValue = elements.xpValue
+	local waveValue = elements.waveValue
 	local streakValue = elements.streakValue
 	local lootList = elements.lootList
 
@@ -321,6 +346,7 @@ local function showEndRound(data)
 
 	nameLabel.Text = data.playerName or "Unknown"
 	xpValue.Text = "+0 XP"
+	waveValue.Text = "Wave " .. tostring(data.waveReached or 1)
 	streakValue.Text = "x" .. tostring(data.streak or 0)
 
 	if data.loot and #data.loot > 0 then
@@ -347,11 +373,13 @@ local function showEndRound(data)
 	slideIn(nameLabel, 0.4)
 	slideIn(elements.xpTitle, 0.5)
 	slideIn(xpValue, 0.55)
-	slideIn(elements.streakTitle, 0.65)
-	slideIn(streakValue, 0.7)
-	slideIn(elements.lootTitle, 0.8)
-	slideIn(lootList, 0.85)
-	slideIn(elements.playBtn, 1.0)
+	slideIn(elements.waveTitle, 0.65)
+	slideIn(waveValue, 0.7)
+	slideIn(elements.streakTitle, 0.8)
+	slideIn(streakValue, 0.85)
+	slideIn(elements.lootTitle, 0.95)
+	slideIn(lootList, 1.0)
+	slideIn(elements.playBtn, 1.15)
 
 	task.spawn(function()
 		task.wait(0.7)

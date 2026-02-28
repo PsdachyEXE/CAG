@@ -1,7 +1,6 @@
 --[[
-	WeaponClient — hitscan raycast weapon with ammo tracking.
-	Click to fire, R to reload. Hold-to-fire supported.
-	Sends hit info to server. Local hit highlighting.
+	WeaponClient — hitscan raycast weapon with ammo, reload camera tilt,
+	and weapon sway on movement. Click to fire, R to reload. Hold-to-fire.
 ]]
 
 local Players = game:GetService("Players")
@@ -22,6 +21,11 @@ local lastFireTime = 0
 WeaponClient.ammo = Config.Weapon.MagSize
 WeaponClient.maxAmmo = Config.Weapon.MagSize
 WeaponClient.reloading = false
+
+-- Sway state
+local swayOffsetX = 0
+local swayOffsetY = 0
+local reloadTiltProgress = 0
 
 local function getCharacter()
 	return player.Character or player.CharacterAdded:Wait()
@@ -52,9 +56,25 @@ local function reload()
 	end
 
 	WeaponClient.reloading = true
+	reloadTiltProgress = 0
 
 	task.spawn(function()
-		task.wait(Config.Weapon.ReloadTime)
+		-- Animate reload tilt
+		local elapsed = 0
+		local reloadTime = Config.Weapon.ReloadTime
+		while elapsed < reloadTime and WeaponClient.reloading do
+			local dt = RunService.Heartbeat:Wait()
+			elapsed += dt
+			local t = elapsed / reloadTime
+			-- Tilt down in first half, back up in second half
+			if t < 0.5 then
+				reloadTiltProgress = t * 2 -- 0 -> 1
+			else
+				reloadTiltProgress = (1 - t) * 2 -- 1 -> 0
+			end
+		end
+
+		reloadTiltProgress = 0
 		WeaponClient.ammo = WeaponClient.maxAmmo
 		WeaponClient.reloading = false
 	end)
@@ -88,11 +108,11 @@ local function fireWeapon()
 
 	WeaponClient.ammo -= 1
 
-	-- Build ray from camera through crosshair (screen center)
+	-- Build ray from camera through crosshair
 	local origin = camera.CFrame.Position
 	local direction = camera.CFrame.LookVector
 
-	-- Apply tiny spread
+	-- Apply spread
 	local spreadRad = math.rad(Config.Weapon.SpreadAngle)
 	local spreadX = (math.random() - 0.5) * spreadRad
 	local spreadY = (math.random() - 0.5) * spreadRad
@@ -107,7 +127,6 @@ local function fireWeapon()
 	if result then
 		local hitPart = result.Instance
 		local hitPosition = result.Position
-
 		local isHeadshot = hitPart.Name == "Head"
 
 		applyHitHighlight(hitPart)
@@ -145,10 +164,66 @@ function WeaponClient.init()
 		end
 	end)
 
+	-- Weapon sway + reload tilt on RenderStepped
+	RunService.RenderStepped:Connect(function(dt)
+		camera = workspace.CurrentCamera
+
+		local character = player.Character
+		if not character then
+			return
+		end
+
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
+		if not humanoid or humanoid.Health <= 0 then
+			return
+		end
+
+		-- Movement-based sway
+		local moveDir = humanoid.MoveDirection
+		local targetSwayX = 0
+		local targetSwayY = 0
+
+		if moveDir.Magnitude > 0.1 then
+			-- Project move direction into camera-local space
+			local camRight = camera.CFrame.RightVector
+			local camUp = camera.CFrame.UpVector
+			local lateralDot = moveDir:Dot(camRight)
+			local forwardDot = moveDir:Dot(camera.CFrame.LookVector)
+
+			targetSwayX = -lateralDot * Config.Weapon.SwayAmount
+			-- Subtle vertical bob
+			targetSwayY = math.sin(tick() * Config.Weapon.SwaySpeed) * Config.Weapon.SwayAmount * 0.3
+		end
+
+		-- Smoothly interpolate sway
+		local returnSpeed = Config.Weapon.SwayReturnSpeed * dt
+		swayOffsetX = swayOffsetX + (targetSwayX - swayOffsetX) * math.min(returnSpeed, 1)
+		swayOffsetY = swayOffsetY + (targetSwayY - swayOffsetY) * math.min(returnSpeed, 1)
+
+		-- Apply sway
+		local swayCF = CFrame.Angles(
+			math.rad(swayOffsetY),
+			math.rad(swayOffsetX),
+			0
+		)
+
+		-- Reload tilt
+		local reloadCF = CFrame.Angles(
+			math.rad(Config.Weapon.ReloadTiltAngle * reloadTiltProgress),
+			0,
+			0
+		)
+
+		camera.CFrame = camera.CFrame * swayCF * reloadCF
+	end)
+
 	-- Reset ammo on respawn
 	player.CharacterAdded:Connect(function()
 		WeaponClient.ammo = WeaponClient.maxAmmo
 		WeaponClient.reloading = false
+		reloadTiltProgress = 0
+		swayOffsetX = 0
+		swayOffsetY = 0
 	end)
 end
 
