@@ -1,6 +1,7 @@
 --[[
-	DamageNumbers — displays floating damage numbers in world space
-	when a hit is confirmed by the server.
+	DamageNumbers — cartoon-style floating damage numbers in world space.
+	Numbers pop in with scale, drift sideways randomly, float up, and fade out.
+	Headshots are red and bigger.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -14,14 +15,9 @@ local DamageNumbers = {}
 local activeBillboards = {}
 
 local function createDamageNumber(position: Vector3, damage: number, isHeadshot: boolean)
-	local billboard = Instance.new("BillboardGui")
-	billboard.Name = "DamageNumber"
-	billboard.Size = UDim2.new(0, 100, 0, 40)
-	billboard.StudsOffset = Vector3.new(0, 2, 0)
-	billboard.AlwaysOnTop = true
-	billboard.MaxDistance = 100
+	-- Random horizontal drift direction
+	local driftX = (math.random() - 0.5) * 2 -- -1 to 1
 
-	-- Attach to an invisible anchor part
 	local anchor = Instance.new("Part")
 	anchor.Name = "DmgAnchor"
 	anchor.Size = Vector3.new(0.1, 0.1, 0.1)
@@ -31,25 +27,37 @@ local function createDamageNumber(position: Vector3, damage: number, isHeadshot:
 	anchor.Transparency = 1
 	anchor.Parent = workspace
 
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "DamageNumber"
+	billboard.AlwaysOnTop = true
+	billboard.MaxDistance = 120
+	billboard.StudsOffset = Vector3.new(0, 2, 0)
 	billboard.Adornee = anchor
 	billboard.Parent = anchor
 
+	-- Cartoon style: bold, thick stroke, slightly oversized
 	local label = Instance.new("TextLabel")
 	label.Size = UDim2.new(1, 0, 1, 0)
 	label.BackgroundTransparency = 1
-	label.Text = tostring(math.floor(damage))
-	label.TextScaled = true
-	label.Font = Enum.Font.GothamBold
-	label.TextStrokeTransparency = 0.2
+	label.Font = Enum.Font.FredokaOne
+	label.TextStrokeTransparency = 0
+	label.TextStrokeColor3 = Color3.fromRGB(30, 30, 30)
 
 	if isHeadshot then
-		label.TextColor3 = Color3.fromRGB(255, 50, 50)
 		label.Text = tostring(math.floor(damage)) .. "!"
-		billboard.Size = UDim2.new(0, 130, 0, 50)
+		label.TextColor3 = Color3.fromRGB(255, 60, 60)
+		billboard.Size = UDim2.new(0, 160, 0, 70)
+		-- Start big for pop effect
+		billboard.Size = UDim2.new(0, 220, 0, 90)
 	else
-		label.TextColor3 = Color3.fromRGB(255, 255, 255)
+		label.Text = tostring(math.floor(damage))
+		label.TextColor3 = Color3.fromRGB(255, 230, 80)
+		billboard.Size = UDim2.new(0, 140, 0, 60)
+		-- Start big for pop effect
+		billboard.Size = UDim2.new(0, 180, 0, 80)
 	end
 
+	label.TextScaled = true
 	label.Parent = billboard
 
 	table.insert(activeBillboards, {
@@ -58,6 +66,9 @@ local function createDamageNumber(position: Vector3, damage: number, isHeadshot:
 		label = label,
 		startTime = tick(),
 		startPosition = position,
+		driftX = driftX,
+		isHeadshot = isHeadshot,
+		popped = false,
 	})
 end
 
@@ -69,7 +80,6 @@ function DamageNumbers.init()
 		createDamageNumber(position, damage, isHeadshot)
 	end)
 
-	-- Animate damage numbers
 	RunService.Heartbeat:Connect(function(_dt)
 		local now = tick()
 		local toRemove = {}
@@ -81,18 +91,39 @@ function DamageNumbers.init()
 			if elapsed >= lifetime then
 				table.insert(toRemove, i)
 			else
-				-- Float upward
-				local rise = Config.Weapon.DamageNumberRiseSpeed * elapsed
-				data.anchor.Position = data.startPosition + Vector3.new(0, rise, 0)
-
-				-- Fade out
 				local alpha = elapsed / lifetime
-				data.label.TextTransparency = alpha
-				data.label.TextStrokeTransparency = 0.2 + (alpha * 0.8)
+
+				-- Pop-in: shrink billboard to target size in first 0.1s
+				if not data.popped and elapsed > 0.08 then
+					data.popped = true
+					if data.isHeadshot then
+						data.billboard.Size = UDim2.new(0, 160, 0, 70)
+					else
+						data.billboard.Size = UDim2.new(0, 140, 0, 60)
+					end
+				end
+
+				-- Float upward + drift sideways
+				local rise = Config.Weapon.DamageNumberRiseSpeed * elapsed
+				local drift = data.driftX * Config.Weapon.DamageNumberDrift * elapsed
+				data.anchor.Position = data.startPosition + Vector3.new(drift, rise, 0)
+
+				-- Fade out in second half
+				local fadeAlpha = math.clamp((alpha - 0.4) / 0.6, 0, 1)
+				data.label.TextTransparency = fadeAlpha
+				data.label.TextStrokeTransparency = fadeAlpha
+
+				-- Slight scale-down as it fades
+				local shrink = 1 - (fadeAlpha * 0.3)
+				local baseW = data.isHeadshot and 160 or 140
+				local baseH = data.isHeadshot and 70 or 60
+				data.billboard.Size = UDim2.new(
+					0, math.floor(baseW * shrink),
+					0, math.floor(baseH * shrink)
+				)
 			end
 		end
 
-		-- Clean up expired (iterate backward)
 		for i = #toRemove, 1, -1 do
 			local idx = toRemove[i]
 			local data = activeBillboards[idx]

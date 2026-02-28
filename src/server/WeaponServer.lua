@@ -1,6 +1,6 @@
 --[[
 	WeaponServer — validates raycast hits from clients, applies damage,
-	and replicates hit feedback + damage numbers.
+	replicates hit feedback + damage numbers, and notifies kill events.
 ]]
 
 local Players = game:GetService("Players")
@@ -15,6 +15,8 @@ function WeaponServer.init()
 	local remotes = ReplicatedStorage:WaitForChild("RemoteEvents")
 	local weaponHitRemote = remotes:WaitForChild(RemoteNames.WeaponHit)
 	local damageNumberRemote = remotes:WaitForChild(RemoteNames.DamageNumber)
+	local hitConfirmRemote = remotes:WaitForChild(RemoteNames.WeaponHitConfirm)
+	local aiStaggerRemote = remotes:WaitForChild(RemoteNames.AIStagger)
 
 	weaponHitRemote.OnServerEvent:Connect(function(player, hitPart, hitPosition, isHeadshot)
 		if not hitPart or not hitPart:IsA("BasePart") then
@@ -59,10 +61,20 @@ function WeaponServer.init()
 			damage = damage * Config.Weapon.HeadshotMultiplier
 		end
 
+		local wasAlive = humanoid.Health > 0
 		humanoid:TakeDamage(damage)
+		local killed = wasAlive and humanoid.Health <= 0
+
+		-- Send hit confirm back to the shooter (for hit marker)
+		hitConfirmRemote:FireClient(player, hitPosition, isHeadshot, killed)
 
 		-- Replicate damage number to all clients
 		damageNumberRemote:FireAllClients(hitPosition, damage, isHeadshot)
+
+		-- Trigger stagger on AI
+		if hitModel.Name == "AIEnemy" then
+			aiStaggerRemote:FireAllClients(hitModel)
+		end
 	end)
 end
 

@@ -1,6 +1,7 @@
 --[[
-	WeaponClient — hitscan raycast weapon. Click to fire.
-	Sends validated hit info to the server. Handles hit highlighting on parts.
+	WeaponClient — hitscan raycast weapon with ammo tracking.
+	Click to fire, R to reload. Hold-to-fire supported.
+	Sends hit info to server. Local hit highlighting.
 ]]
 
 local Players = game:GetService("Players")
@@ -16,6 +17,11 @@ local WeaponClient = {}
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 local lastFireTime = 0
+
+-- Ammo state (exposed for HUD)
+WeaponClient.ammo = Config.Weapon.MagSize
+WeaponClient.maxAmmo = Config.Weapon.MagSize
+WeaponClient.reloading = false
 
 local function getCharacter()
 	return player.Character or player.CharacterAdded:Wait()
@@ -40,7 +46,30 @@ local function applyHitHighlight(part: BasePart)
 	end)
 end
 
+local function reload()
+	if WeaponClient.reloading or WeaponClient.ammo == WeaponClient.maxAmmo then
+		return
+	end
+
+	WeaponClient.reloading = true
+
+	task.spawn(function()
+		task.wait(Config.Weapon.ReloadTime)
+		WeaponClient.ammo = WeaponClient.maxAmmo
+		WeaponClient.reloading = false
+	end)
+end
+
 local function fireWeapon()
+	if WeaponClient.reloading then
+		return
+	end
+
+	if WeaponClient.ammo <= 0 then
+		reload()
+		return
+	end
+
 	local now = tick()
 	if now - lastFireTime < Config.Weapon.FireRate then
 		return
@@ -56,6 +85,8 @@ local function fireWeapon()
 	if not humanoid or humanoid.Health <= 0 then
 		return
 	end
+
+	WeaponClient.ammo -= 1
 
 	-- Build ray from camera through crosshair (screen center)
 	local origin = camera.CFrame.Position
@@ -77,29 +108,16 @@ local function fireWeapon()
 		local hitPart = result.Instance
 		local hitPosition = result.Position
 
-		-- Check if headshot
 		local isHeadshot = hitPart.Name == "Head"
 
-		-- Local hit highlight
 		applyHitHighlight(hitPart)
 
-		-- Send to server
 		local remotes = ReplicatedStorage:WaitForChild("RemoteEvents")
 		remotes:WaitForChild(RemoteNames.WeaponHit):FireServer(hitPart, hitPosition, isHeadshot)
 	end
 end
 
 function WeaponClient.init()
-	UserInputService.InputBegan:Connect(function(input, gameProcessed)
-		if gameProcessed then
-			return
-		end
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then
-			fireWeapon()
-		end
-	end)
-
-	-- Hold-to-fire support
 	local firing = false
 
 	UserInputService.InputBegan:Connect(function(input, gameProcessed)
@@ -108,6 +126,10 @@ function WeaponClient.init()
 		end
 		if input.UserInputType == Enum.UserInputType.MouseButton1 then
 			firing = true
+			fireWeapon()
+		end
+		if input.KeyCode == Enum.KeyCode.R then
+			reload()
 		end
 	end)
 
@@ -121,6 +143,12 @@ function WeaponClient.init()
 		if firing then
 			fireWeapon()
 		end
+	end)
+
+	-- Reset ammo on respawn
+	player.CharacterAdded:Connect(function()
+		WeaponClient.ammo = WeaponClient.maxAmmo
+		WeaponClient.reloading = false
 	end)
 end
 

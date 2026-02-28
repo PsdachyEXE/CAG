@@ -1,6 +1,8 @@
 --[[
-	EndRoundUI — shows the end-of-round screen.
-	Displays whether the player extracted or died, XP placeholder, and loot placeholder.
+	EndRoundUI — cartoon-style results screen.
+	Bold, chunky fonts. Bright colour palette (yellows, oranges, whites).
+	Shows: status, XP (animated counter), loot, streak, PLAY AGAIN button.
+	Each element slides in with staggered animations.
 ]]
 
 local Players = game:GetService("Players")
@@ -16,6 +18,23 @@ local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
 local screenGui = nil
+local elements = {} -- tracked UI elements for animation
+
+local function makeLabel(parent, props)
+	local label = Instance.new("TextLabel")
+	label.BackgroundTransparency = 1
+	label.Font = props.font or Enum.Font.FredokaOne
+	label.TextSize = props.textSize or 24
+	label.TextColor3 = props.color or Color3.new(1, 1, 1)
+	label.TextStrokeTransparency = props.strokeTransparency or 0
+	label.TextStrokeColor3 = props.strokeColor or Color3.fromRGB(30, 30, 30)
+	label.Text = props.text or ""
+	label.Size = props.size or UDim2.new(1, 0, 0, 40)
+	label.Position = props.position or UDim2.new(0, 0, 0, 0)
+	label.TextWrapped = true
+	label.Parent = parent
+	return label
+end
 
 local function createEndRoundScreen()
 	local gui = Instance.new("ScreenGui")
@@ -26,127 +45,255 @@ local function createEndRoundScreen()
 	gui.Enabled = false
 	gui.Parent = playerGui
 
-	-- Full-screen darkened background
+	-- Full-screen background
 	local bg = Instance.new("Frame")
 	bg.Name = "Background"
 	bg.Size = UDim2.new(1, 0, 1, 0)
-	bg.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-	bg.BackgroundTransparency = 0.4
+	bg.BackgroundColor3 = Color3.fromRGB(15, 15, 25)
+	bg.BackgroundTransparency = 1
 	bg.Parent = gui
 
 	-- Main card
 	local card = Instance.new("Frame")
 	card.Name = "Card"
-	card.Size = UDim2.new(0, 500, 0, 400)
-	card.Position = UDim2.new(0.5, -250, 0.5, -200)
-	card.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-	card.BackgroundTransparency = 0.1
+	card.AnchorPoint = Vector2.new(0.5, 0.5)
+	card.Size = UDim2.new(0, 550, 0, 520)
+	card.Position = UDim2.new(0.5, 0, 0.5, 0)
+	card.BackgroundColor3 = Color3.fromRGB(25, 25, 40)
+	card.BackgroundTransparency = 0.05
 	card.Parent = bg
 
 	local cardCorner = Instance.new("UICorner")
-	cardCorner.CornerRadius = UDim.new(0, 16)
+	cardCorner.CornerRadius = UDim.new(0, 20)
 	cardCorner.Parent = card
 
 	local cardStroke = Instance.new("UIStroke")
-	cardStroke.Color = Color3.fromRGB(80, 80, 120)
-	cardStroke.Thickness = 2
+	cardStroke.Color = Color3.fromRGB(255, 180, 40)
+	cardStroke.Thickness = 3
 	cardStroke.Parent = card
 
-	-- Status header (EXTRACTED / ELIMINATED)
-	local header = Instance.new("TextLabel")
+	-- Status header
+	local header = makeLabel(card, {
+		text = "EXTRACTED",
+		textSize = 52,
+		color = Color3.fromRGB(0, 255, 130),
+		strokeColor = Color3.fromRGB(0, 50, 25),
+		size = UDim2.new(1, 0, 0, 70),
+		position = UDim2.new(0, 0, 0, 20),
+	})
 	header.Name = "Header"
-	header.Size = UDim2.new(1, 0, 0, 60)
-	header.Position = UDim2.new(0, 0, 0, 20)
-	header.BackgroundTransparency = 1
-	header.Text = "EXTRACTED"
-	header.Font = Enum.Font.GothamBold
-	header.TextSize = 36
-	header.TextColor3 = Color3.fromRGB(0, 255, 130)
-	header.Parent = card
 
 	-- Player name
-	local nameLabel = Instance.new("TextLabel")
+	local nameLabel = makeLabel(card, {
+		text = "",
+		textSize = 20,
+		font = Enum.Font.GothamBold,
+		color = Color3.fromRGB(200, 200, 220),
+		strokeTransparency = 0.5,
+		size = UDim2.new(1, 0, 0, 28),
+		position = UDim2.new(0, 0, 0, 90),
+	})
 	nameLabel.Name = "PlayerName"
-	nameLabel.Size = UDim2.new(1, 0, 0, 30)
-	nameLabel.Position = UDim2.new(0, 0, 0, 80)
-	nameLabel.BackgroundTransparency = 1
-	nameLabel.Text = ""
-	nameLabel.Font = Enum.Font.Gotham
-	nameLabel.TextSize = 18
-	nameLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-	nameLabel.Parent = card
 
 	-- Divider
 	local divider = Instance.new("Frame")
 	divider.Name = "Divider"
-	divider.Size = UDim2.new(0.8, 0, 0, 2)
-	divider.Position = UDim2.new(0.1, 0, 0, 120)
-	divider.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+	divider.Size = UDim2.new(0.8, 0, 0, 3)
+	divider.Position = UDim2.new(0.1, 0, 0, 128)
+	divider.BackgroundColor3 = Color3.fromRGB(255, 180, 40)
+	divider.BackgroundTransparency = 0.5
 	divider.BorderSizePixel = 0
 	divider.Parent = card
 
 	-- XP section
-	local xpLabel = Instance.new("TextLabel")
-	xpLabel.Name = "XPLabel"
-	xpLabel.Size = UDim2.new(1, 0, 0, 30)
-	xpLabel.Position = UDim2.new(0, 0, 0, 140)
-	xpLabel.BackgroundTransparency = 1
-	xpLabel.Text = "XP EARNED"
-	xpLabel.Font = Enum.Font.GothamBold
-	xpLabel.TextSize = 14
-	xpLabel.TextColor3 = Color3.fromRGB(150, 150, 180)
-	xpLabel.Parent = card
+	local xpTitle = makeLabel(card, {
+		text = "XP EARNED",
+		textSize = 14,
+		font = Enum.Font.GothamBold,
+		color = Color3.fromRGB(180, 180, 200),
+		strokeTransparency = 0.6,
+		size = UDim2.new(1, 0, 0, 22),
+		position = UDim2.new(0, 0, 0, 145),
+	})
+	xpTitle.Name = "XPTitle"
 
-	local xpValue = Instance.new("TextLabel")
+	local xpValue = makeLabel(card, {
+		text = "+0 XP",
+		textSize = 40,
+		color = Color3.fromRGB(255, 220, 50),
+		strokeColor = Color3.fromRGB(100, 80, 0),
+		size = UDim2.new(1, 0, 0, 50),
+		position = UDim2.new(0, 0, 0, 165),
+	})
 	xpValue.Name = "XPValue"
-	xpValue.Size = UDim2.new(1, 0, 0, 40)
-	xpValue.Position = UDim2.new(0, 0, 0, 165)
-	xpValue.BackgroundTransparency = 1
-	xpValue.Text = "+100 XP"
-	xpValue.Font = Enum.Font.GothamBold
-	xpValue.TextSize = 28
-	xpValue.TextColor3 = Color3.fromRGB(255, 220, 50)
-	xpValue.Parent = card
+
+	-- Streak section
+	local streakTitle = makeLabel(card, {
+		text = "STREAK",
+		textSize = 14,
+		font = Enum.Font.GothamBold,
+		color = Color3.fromRGB(180, 180, 200),
+		strokeTransparency = 0.6,
+		size = UDim2.new(1, 0, 0, 22),
+		position = UDim2.new(0, 0, 0, 225),
+	})
+	streakTitle.Name = "StreakTitle"
+
+	local streakValue = makeLabel(card, {
+		text = "x0",
+		textSize = 34,
+		color = Color3.fromRGB(255, 140, 40),
+		strokeColor = Color3.fromRGB(100, 50, 0),
+		size = UDim2.new(1, 0, 0, 44),
+		position = UDim2.new(0, 0, 0, 245),
+	})
+	streakValue.Name = "StreakValue"
 
 	-- Loot section
-	local lootHeader = Instance.new("TextLabel")
-	lootHeader.Name = "LootHeader"
-	lootHeader.Size = UDim2.new(1, 0, 0, 30)
-	lootHeader.Position = UDim2.new(0, 0, 0, 220)
-	lootHeader.BackgroundTransparency = 1
-	lootHeader.Text = "LOOT"
-	lootHeader.Font = Enum.Font.GothamBold
-	lootHeader.TextSize = 14
-	lootHeader.TextColor3 = Color3.fromRGB(150, 150, 180)
-	lootHeader.Parent = card
+	local lootTitle = makeLabel(card, {
+		text = "LOOT",
+		textSize = 14,
+		font = Enum.Font.GothamBold,
+		color = Color3.fromRGB(180, 180, 200),
+		strokeTransparency = 0.6,
+		size = UDim2.new(1, 0, 0, 22),
+		position = UDim2.new(0, 0, 0, 298),
+	})
+	lootTitle.Name = "LootTitle"
 
-	local lootList = Instance.new("TextLabel")
+	local lootList = makeLabel(card, {
+		text = "",
+		textSize = 18,
+		font = Enum.Font.GothamBold,
+		color = Color3.fromRGB(230, 230, 240),
+		strokeTransparency = 0.4,
+		size = UDim2.new(0.8, 0, 0, 70),
+		position = UDim2.new(0.1, 0, 0, 320),
+	})
 	lootList.Name = "LootList"
-	lootList.Size = UDim2.new(0.8, 0, 0, 80)
-	lootList.Position = UDim2.new(0.1, 0, 0, 250)
-	lootList.BackgroundTransparency = 1
-	lootList.Text = ""
-	lootList.Font = Enum.Font.Gotham
-	lootList.TextSize = 16
-	lootList.TextColor3 = Color3.fromRGB(200, 200, 200)
-	lootList.TextWrapped = true
 	lootList.TextYAlignment = Enum.TextYAlignment.Top
-	lootList.Parent = card
 
-	-- Timer / auto-close text
-	local timerLabel = Instance.new("TextLabel")
-	timerLabel.Name = "Timer"
-	timerLabel.Size = UDim2.new(1, 0, 0, 20)
-	timerLabel.Position = UDim2.new(0, 0, 1, -30)
-	timerLabel.BackgroundTransparency = 1
-	timerLabel.Text = ""
-	timerLabel.Font = Enum.Font.Gotham
-	timerLabel.TextSize = 12
-	timerLabel.TextColor3 = Color3.fromRGB(120, 120, 140)
-	timerLabel.Parent = card
+	-- PLAY AGAIN button
+	local playBtn = Instance.new("TextButton")
+	playBtn.Name = "PlayAgain"
+	playBtn.Size = UDim2.new(0, 220, 0, 50)
+	playBtn.Position = UDim2.new(0.5, -110, 1, -70)
+	playBtn.BackgroundColor3 = Color3.fromRGB(255, 180, 40)
+	playBtn.Text = "PLAY AGAIN"
+	playBtn.Font = Enum.Font.FredokaOne
+	playBtn.TextSize = 26
+	playBtn.TextColor3 = Color3.fromRGB(30, 20, 0)
+	playBtn.TextStrokeTransparency = 1
+	playBtn.AutoButtonColor = true
+	playBtn.Parent = card
+
+	local btnCorner = Instance.new("UICorner")
+	btnCorner.CornerRadius = UDim.new(0, 12)
+	btnCorner.Parent = playBtn
+
+	local btnStroke = Instance.new("UIStroke")
+	btnStroke.Color = Color3.fromRGB(200, 140, 20)
+	btnStroke.Thickness = 2
+	btnStroke.Parent = playBtn
+
+	playBtn.MouseButton1Click:Connect(function()
+		local remotes = ReplicatedStorage:WaitForChild("RemoteEvents")
+		local playAgainRemote = remotes:FindFirstChild(RemoteNames.PlayAgain)
+		if playAgainRemote then
+			playAgainRemote:FireServer()
+		end
+
+		TweenService:Create(bg, TweenInfo.new(0.3), { BackgroundTransparency = 1 }):Play()
+		task.wait(0.3)
+		gui.Enabled = false
+	end)
+
+	-- Hover effect
+	playBtn.MouseEnter:Connect(function()
+		TweenService:Create(playBtn, TweenInfo.new(0.1), {
+			Size = UDim2.new(0, 230, 0, 54),
+			Position = UDim2.new(0.5, -115, 1, -72),
+		}):Play()
+	end)
+	playBtn.MouseLeave:Connect(function()
+		TweenService:Create(playBtn, TweenInfo.new(0.1), {
+			Size = UDim2.new(0, 220, 0, 50),
+			Position = UDim2.new(0.5, -110, 1, -70),
+		}):Play()
+	end)
+
+	elements = {
+		bg = bg,
+		card = card,
+		header = header,
+		nameLabel = nameLabel,
+		divider = divider,
+		xpTitle = xpTitle,
+		xpValue = xpValue,
+		streakTitle = streakTitle,
+		streakValue = streakValue,
+		lootTitle = lootTitle,
+		lootList = lootList,
+		playBtn = playBtn,
+	}
 
 	screenGui = gui
 	return gui
+end
+
+local function animateXPCounter(targetXP: number)
+	local xpValue = elements.xpValue
+	local duration = 1.2
+	local startTime = tick()
+
+	task.spawn(function()
+		local current = 0
+		while current < targetXP do
+			local elapsed = tick() - startTime
+			local t = math.clamp(elapsed / duration, 0, 1)
+			t = 1 - (1 - t) ^ 3
+			current = math.floor(t * targetXP)
+			xpValue.Text = "+" .. tostring(current) .. " XP"
+			task.wait()
+		end
+		xpValue.Text = "+" .. tostring(targetXP) .. " XP"
+	end)
+end
+
+local function slideIn(element, delay: number, offsetY: number?)
+	local targetPos = element.Position
+	local startPos = UDim2.new(
+		targetPos.X.Scale,
+		targetPos.X.Offset,
+		targetPos.Y.Scale,
+		targetPos.Y.Offset + (offsetY or 30)
+	)
+
+	element.Position = startPos
+
+	if element:IsA("TextLabel") or element:IsA("TextButton") then
+		element.TextTransparency = 1
+		element.TextStrokeTransparency = 1
+	end
+
+	task.spawn(function()
+		task.wait(delay)
+
+		TweenService:Create(element, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+			Position = targetPos,
+		}):Play()
+
+		if element:IsA("TextLabel") then
+			TweenService:Create(element, TweenInfo.new(0.3), {
+				TextTransparency = 0,
+				TextStrokeTransparency = element == elements.header and 0 or 0.3,
+			}):Play()
+		elseif element:IsA("TextButton") then
+			TweenService:Create(element, TweenInfo.new(0.3), {
+				TextTransparency = 0,
+			}):Play()
+		end
+	end)
 end
 
 local function showEndRound(data)
@@ -154,75 +301,70 @@ local function showEndRound(data)
 		return
 	end
 
-	local card = screenGui.Background.Card
-	local header = card.Header
-	local nameLabel = card.PlayerName
-	local xpValue = card.XPValue
-	local lootList = card.LootList
-	local timerLabel = card.Timer
+	local bg = elements.bg
+	local card = elements.card
+	local header = elements.header
+	local nameLabel = elements.nameLabel
+	local xpValue = elements.xpValue
+	local streakValue = elements.streakValue
+	local lootList = elements.lootList
 
-	-- Set extracted vs eliminated
 	if data.extracted then
 		header.Text = "EXTRACTED"
 		header.TextColor3 = Color3.fromRGB(0, 255, 130)
+		header.TextStrokeColor3 = Color3.fromRGB(0, 50, 25)
 	else
 		header.Text = "ELIMINATED"
-		header.TextColor3 = Color3.fromRGB(255, 60, 60)
+		header.TextColor3 = Color3.fromRGB(255, 70, 70)
+		header.TextStrokeColor3 = Color3.fromRGB(80, 15, 15)
 	end
 
 	nameLabel.Text = data.playerName or "Unknown"
-	xpValue.Text = "+" .. tostring(data.xp or 0) .. " XP"
+	xpValue.Text = "+0 XP"
+	streakValue.Text = "x" .. tostring(data.streak or 0)
 
-	-- Loot list
 	if data.loot and #data.loot > 0 then
-		local lootText = ""
-		for i, item in data.loot do
-			lootText = lootText .. "• " .. item
-			if i < #data.loot then
-				lootText = lootText .. "\n"
-			end
+		local lines = {}
+		for _, item in data.loot do
+			table.insert(lines, "  " .. item)
 		end
-		lootList.Text = lootText
+		lootList.Text = table.concat(lines, "\n")
 	else
 		lootList.Text = "No loot this round"
 	end
 
-	-- Animate in
-	local card_frame = card
-	card_frame.Position = UDim2.new(0.5, -250, 0.6, 0)
-	screenGui.Background.BackgroundTransparency = 1
+	bg.BackgroundTransparency = 1
+	card.Position = UDim2.new(0.5, 0, 0.6, 0)
 	screenGui.Enabled = true
 
-	-- Fade background
-	TweenService:Create(
-		screenGui.Background,
-		TweenInfo.new(0.4, Enum.EasingStyle.Quad),
-		{ BackgroundTransparency = 0.4 }
-	):Play()
+	TweenService:Create(bg, TweenInfo.new(0.4), { BackgroundTransparency = 0.3 }):Play()
 
-	-- Slide card up
-	TweenService:Create(
-		card_frame,
-		TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-		{ Position = UDim2.new(0.5, -250, 0.5, -200) }
-	):Play()
+	TweenService:Create(card, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Position = UDim2.new(0.5, 0, 0.5, 0),
+	}):Play()
 
-	-- Countdown timer
+	slideIn(header, 0.3)
+	slideIn(nameLabel, 0.4)
+	slideIn(elements.xpTitle, 0.5)
+	slideIn(xpValue, 0.55)
+	slideIn(elements.streakTitle, 0.65)
+	slideIn(streakValue, 0.7)
+	slideIn(elements.lootTitle, 0.8)
+	slideIn(lootList, 0.85)
+	slideIn(elements.playBtn, 1.0)
+
 	task.spawn(function()
-		for remaining = Config.Round.EndScreenDuration, 1, -1 do
-			timerLabel.Text = "Closing in " .. remaining .. "s..."
-			task.wait(1)
+		task.wait(0.7)
+		animateXPCounter(data.xp or 0)
+	end)
+
+	task.spawn(function()
+		task.wait(Config.Round.EndScreenDuration)
+		if screenGui.Enabled then
+			TweenService:Create(bg, TweenInfo.new(0.3), { BackgroundTransparency = 1 }):Play()
+			task.wait(0.3)
+			screenGui.Enabled = false
 		end
-
-		-- Fade out
-		TweenService:Create(
-			screenGui.Background,
-			TweenInfo.new(0.3, Enum.EasingStyle.Quad),
-			{ BackgroundTransparency = 1 }
-		):Play()
-
-		task.wait(0.3)
-		screenGui.Enabled = false
 	end)
 end
 
