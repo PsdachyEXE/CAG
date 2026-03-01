@@ -42,6 +42,44 @@ local roundActive = false
 
 -- ── Helpers ──────────────────────────────────────────────
 
+local function fireLeaderboardUpdate()
+	local remotes = ReplicatedStorage:FindFirstChild("RemoteEvents")
+	if not remotes then
+		return
+	end
+	local remote = remotes:FindFirstChild(RemoteNames.LeaderboardUpdate)
+	if not remote then
+		return
+	end
+
+	local data = {}
+	for _, p in Players:GetPlayers() do
+		local status = "In Match"
+		if extractedPlayers[p] then
+			status = "Extracted"
+		elseif not alivePlayers[p] and roundActive then
+			status = "Eliminated"
+		end
+
+		local itemCount = 0
+		if InventoryServer then
+			local inv = InventoryServer.getInventory(p)
+			if inv then
+				itemCount = #inv
+			end
+		end
+
+		table.insert(data, {
+			name = p.Name,
+			kills = playerKills[p] or 0,
+			items = itemCount,
+			status = status,
+		})
+	end
+
+	remote:FireAllClients(data)
+end
+
 local function fireStateChange(state: string)
 	local remotes = ReplicatedStorage:FindFirstChild("RemoteEvents")
 	if not remotes then
@@ -289,6 +327,9 @@ function RoundServer._startRound()
 				print("[CAG] Extraction phase activated")
 			end
 
+			-- Broadcast leaderboard
+			fireLeaderboardUpdate()
+
 			-- Time expired
 			if remaining <= 0 then
 				endRound("time_expired")
@@ -307,9 +348,7 @@ function RoundServer.onPlayerKill(killer: Player, victimName: string)
 		return
 	end
 
-	if playerKills[killer] then
-		playerKills[killer] = playerKills[killer] + 1
-	end
+	playerKills[killer] = (playerKills[killer] or 0) + 1
 
 	-- Fire kill feed entry
 	local remotes = ReplicatedStorage:FindFirstChild("RemoteEvents")
@@ -323,6 +362,8 @@ function RoundServer.onPlayerKill(killer: Player, victimName: string)
 			})
 		end
 	end
+
+	fireLeaderboardUpdate()
 end
 
 function RoundServer.onPlayerDied(player: Player, killerName: string?)
@@ -354,6 +395,8 @@ function RoundServer.onPlayerDied(player: Player, killerName: string?)
 		end
 	end
 
+	fireLeaderboardUpdate()
+
 	-- Check if all players dead
 	if countAlivePlayers() == 0 then
 		endRound("all_eliminated")
@@ -367,6 +410,8 @@ function RoundServer.onPlayerExtracted(player: Player)
 
 	extractedPlayers[player] = true
 	alivePlayers[player] = nil
+
+	fireLeaderboardUpdate()
 
 	-- Check if all players extracted or dead
 	if countAlivePlayers() == 0 then

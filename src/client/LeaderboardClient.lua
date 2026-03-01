@@ -220,6 +220,9 @@ function LeaderboardClient.init()
 			isVisible = not isVisible
 			if screenGui then
 				screenGui.Enabled = isVisible
+				if isVisible then
+					refreshBoard(leaderboardData)
+				end
 			end
 		end
 	end)
