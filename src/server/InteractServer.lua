@@ -1,8 +1,10 @@
 --[[
-	InteractServer — server-side handler for the E-key interact system.
-	Validates container interactions, rolls loot, manages container states.
+	InteractServer — server-side container interact handler.
+	On startup: tags all models named ContainerLarge, ContainerMedium,
+	ContainerSmall with CollectionService "LootContainer".
+	Listens for ContainerInteract remote, validates, rolls loot.
 	Container states: Ready / Looting / Looted
-	Exports: resetContainers, getContainerState, init
+	Exports: resetContainers, init
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -19,25 +21,34 @@ local LootTableServer = nil
 local InventoryServer = nil
 
 local CONTAINER_TAG = "LootContainer"
-local SERVER_RANGE = Config.Interact.SERVER_RANGE
-local LOOT_LOCK_TIME = Config.Interact.LOOT_LOCK_TIME
+local SERVER_RANGE = 8 -- 6 client + 2 tolerance
+local LOOT_DELAY = Config.CONTAINER_LOOT_DELAY
 
-local CONTAINER_STATE = { Ready = "Ready", Looting = "Looting", Looted = "Looted" }
+local VALID_NAMES = {
+	ContainerLarge = true,
+	ContainerMedium = true,
+	ContainerSmall = true,
+}
 
--- Tracks state per container: [Instance] = { state, lootingPlayer? }
-local containerStates = {}
+-- Container state tracking: [Instance] = { state, lootingPlayer? }
+local containerStates = {} -- Ready / Looting / Looted
 
-local function initContainerState(container)
-	if not containerStates[container] then
-		containerStates[container] = {
-			state = CONTAINER_STATE.Ready,
-			lootingPlayer = nil,
-		}
+local function tagObject(obj)
+	if VALID_NAMES[obj.Name] then
+		if not CollectionService:HasTag(obj, CONTAINER_TAG) then
+			CollectionService:AddTag(obj, CONTAINER_TAG)
+		end
 	end
 end
 
-local function getPlayerDistance(plr: Player, target: Instance): number?
-	local character = plr.Character
+local function initState(container)
+	if not containerStates[container] then
+		containerStates[container] = { state = "Ready" }
+	end
+end
+
+local function getDistance(player: Player, target: Instance): number?
+	local character = player.Character
 	if not character then
 		return nil
 	end
@@ -46,22 +57,21 @@ local function getPlayerDistance(plr: Player, target: Instance): number?
 		return nil
 	end
 
-	-- Find primary part or part of the target
-	local targetPart = nil
+	local part = nil
 	if target:IsA("Model") then
-		targetPart = target.PrimaryPart or target:FindFirstChildWhichIsA("BasePart")
+		part = target.PrimaryPart or target:FindFirstChildWhichIsA("BasePart")
 	elseif target:IsA("BasePart") then
-		targetPart = target
+		part = target
 	end
 
-	if not targetPart then
+	if not part then
 		return nil
 	end
 
-	return (hrp.Position - targetPart.Position).Magnitude
+	return (hrp.Position - part.Position).Magnitude
 end
 
-local function handleInteract(plr: Player, container: Instance)
+local function handleInteract(player: Player, container: Instance)
 	local remotes = ReplicatedStorage:FindFirstChild("RemoteEvents")
 	if not remotes then
 		return
@@ -75,129 +85,127 @@ local function handleInteract(plr: Player, container: Instance)
 		return
 	end
 
-	-- Initialize state if needed
-	initContainerState(container)
+	-- Init state if needed
+	initState(container)
 	local cState = containerStates[container]
 
-	-- Validate not already looted or being looted
-	if cState.state ~= CONTAINER_STATE.Ready then
+	-- Must be Ready
+	if cState.state ~= "Ready" then
 		return
 	end
 
-	-- Server-side distance check (8 studs = 6 client + 2 tolerance)
-	local dist = getPlayerDistance(plr, container)
+	-- Distance check
+	local dist = getDistance(player, container)
 	if not dist or dist > SERVER_RANGE then
 		return
 	end
 
-	-- Check inventory space
-	if InventoryServer then
-		local inv = InventoryServer.getInventory(plr)
-		if inv and #inv >= Config.Inventory.MaxVolatileSlots then
-			local failRemote = remotes:FindFirstChild(RemoteNames.InteractFailed)
-			if failRemote then
-				failRemote:FireClient(plr, "INVENTORY_FULL")
-			end
-			return
+	-- Inventory full check
+	if InventoryServer and InventoryServer.isFull(player) then
+		local failRemote = remotes:FindFirstChild(RemoteNames.InteractFailed)
+		if failRemote then
+			failRemote:FireClient(player, "INVENTORY_FULL")
 		end
+		return
 	end
 
 	-- Lock container
-	cState.state = CONTAINER_STATE.Looting
-	cState.lootingPlayer = plr
+	cState.state = "Looting"
+	cState.lootingPlayer = player
 
-	-- Roll loot and add to inventory
-	if LootTableServer and InventoryServer then
-		local item = LootTableServer.rollLoot("container", plr)
-		if item then
-			local added = InventoryServer.addItem(plr, item)
-			if not added then
-				-- Inventory became full between check and add
-				local failRemote = remotes:FindFirstChild(RemoteNames.InteractFailed)
-				if failRemote then
-					failRemote:FireClient(plr, "INVENTORY_FULL")
-				end
+	-- Loot delay
+	task.wait(LOOT_DELAY)
+
+	-- Roll loot
+	local item = nil
+	if LootTableServer then
+		item = LootTableServer.rollLoot("container")
+	end
+
+	-- Add to inventory
+	if item and InventoryServer then
+		local added = InventoryServer.addItem(player, item)
+		if added then
+			-- Fire LootReceived to client with item data
+			local lootRemote = remotes:FindFirstChild(RemoteNames.LootReceived)
+			if lootRemote then
+				lootRemote:FireClient(player, item)
+			end
+		else
+			-- Became full between check and add
+			local failRemote = remotes:FindFirstChild(RemoteNames.InteractFailed)
+			if failRemote then
+				failRemote:FireClient(player, "INVENTORY_FULL")
 			end
 		end
 	end
 
-	-- Fire container looted to all clients
-	local lootedRemote = remotes:FindFirstChild(RemoteNames.ContainerLooted)
-	if lootedRemote then
-		lootedRemote:FireAllClients(container)
-	end
-
-	-- Unlock after lock time, then mark looted
-	task.spawn(function()
-		task.wait(LOOT_LOCK_TIME)
-		cState.state = CONTAINER_STATE.Looted
-		cState.lootingPlayer = nil
-	end)
+	-- Mark looted
+	cState.state = "Looted"
+	cState.lootingPlayer = nil
 end
 
 function InteractServer.resetContainers()
-	-- Reset all tagged containers to Ready state
 	for container, _ in containerStates do
-		containerStates[container] = {
-			state = CONTAINER_STATE.Ready,
-			lootingPlayer = nil,
-		}
+		containerStates[container] = { state = "Ready" }
 	end
 
-	-- Also init any tagged containers that may not have state yet
 	for _, container in CollectionService:GetTagged(CONTAINER_TAG) do
-		containerStates[container] = {
-			state = CONTAINER_STATE.Ready,
-			lootingPlayer = nil,
-		}
+		containerStates[container] = { state = "Ready" }
 	end
 
-	print("[CAG] InteractServer: containers reset")
-end
-
-function InteractServer.getContainerState(container: Instance): string?
-	local cState = containerStates[container]
-	if not cState then
-		return nil
-	end
-	return cState.state
+	print("[CAG] InteractServer: containers reset to Ready")
 end
 
 function InteractServer.init()
+	-- Resolve module references
 	local serverModules = script.Parent
-	local lootModule = serverModules:FindFirstChild("LootTableServer")
-	if lootModule then
-		LootTableServer = require(lootModule)
+	local lootMod = serverModules:FindFirstChild("LootTableServer")
+	if lootMod then
+		LootTableServer = require(lootMod)
 	end
-	local invModule = serverModules:FindFirstChild("InventoryServer")
-	if invModule then
-		InventoryServer = require(invModule)
-	end
-
-	-- Init state for all currently tagged containers
-	for _, container in CollectionService:GetTagged(CONTAINER_TAG) do
-		initContainerState(container)
+	local invMod = serverModules:FindFirstChild("InventoryServer")
+	if invMod then
+		InventoryServer = require(invMod)
 	end
 
-	-- Watch for newly tagged containers
-	CollectionService:GetInstanceAddedSignal(CONTAINER_TAG):Connect(function(container)
-		initContainerState(container)
+	-- Tag all existing valid containers in Workspace
+	for _, obj in workspace:GetDescendants() do
+		tagObject(obj)
+	end
+
+	-- Watch for new objects
+	workspace.DescendantAdded:Connect(function(obj)
+		tagObject(obj)
 	end)
 
-	-- Clean up removed containers
+	-- Init state for all tagged containers
+	for _, container in CollectionService:GetTagged(CONTAINER_TAG) do
+		initState(container)
+	end
+
+	-- Track newly tagged
+	CollectionService:GetInstanceAddedSignal(CONTAINER_TAG):Connect(function(container)
+		initState(container)
+	end)
+
+	-- Clean up removed
 	CollectionService:GetInstanceRemovedSignal(CONTAINER_TAG):Connect(function(container)
 		containerStates[container] = nil
 	end)
 
-	-- Listen for ContainerInteract from clients
+	-- Listen for ContainerInteract remote
 	local remotes = ReplicatedStorage:WaitForChild("RemoteEvents")
 	local interactRemote = remotes:WaitForChild(RemoteNames.ContainerInteract)
 
-	interactRemote.OnServerEvent:Connect(function(plr, container)
-		handleInteract(plr, container)
+	interactRemote.OnServerEvent:Connect(function(player, container)
+		task.spawn(function()
+			handleInteract(player, container)
+		end)
 	end)
 
-	print("[CAG] InteractServer initialized")
+	local tagCount = #CollectionService:GetTagged(CONTAINER_TAG)
+	print("[CAG] InteractServer initialized (" .. tagCount .. " containers tagged)")
 end
 
 return InteractServer

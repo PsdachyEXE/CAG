@@ -1,6 +1,5 @@
 --[[
 	Server bootstrap — creates remote events and initializes all server systems.
-	Init order matters: data systems first, then game systems, then coordinator.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -17,50 +16,15 @@ for _, name in RemoteNames do
 	end
 end
 
--- ── Phase 1: Data systems (no server deps) ──
-local PlayerDataServer = require(script.PlayerDataServer)
-local InventoryServer = require(script.InventoryServer)
+-- ── Data systems ──
 local LootTableServer = require(script.LootTableServer)
+local InventoryServer = require(script.InventoryServer)
 
-PlayerDataServer.init()
-InventoryServer.init()
 LootTableServer.init()
+InventoryServer.init()
 
--- ── Phase 1b: Progression (wraps PlayerDataServer.addXP, must init before RoundServer) ──
-local ProgressionServer = require(script.ProgressionServer)
-ProgressionServer.init()
-
--- ── Phase 2: Game systems ──
-local ContainerServer = require(script.ContainerServer)
-local AirdropServer = require(script.AirdropServer)
-local WeaponServer = require(script.WeaponServer)
-local AIServer = require(script.AIServer)
-local ExtractionServer = require(script.ExtractionServer)
-
-ContainerServer.init()
-AirdropServer.init()
-WeaponServer.init()
-AIServer.init()
-ExtractionServer.init()
-
--- ── Phase 2b: Interact system (depends on LootTableServer, InventoryServer, ContainerServer) ──
+-- ── Interact system ──
 local InteractServer = require(script.InteractServer)
 InteractServer.init()
-
--- ── Phase 3: Squad & Spawn ──
-local SquadServer = require(script.SquadServer)
-local SpawnServer = require(script.SpawnServer)
-SquadServer.init()
-SpawnServer.init()
-
--- ── Phase 4: Round coordinator (depends on all above) ──
-local RoundServer = require(script.RoundServer)
-RoundServer.init()
-
--- ── Phase 5: Security (runs after everything) ──
-local RemoteThrottleServer = require(script.RemoteThrottleServer)
-local AnticheatServer = require(script.AnticheatServer)
-RemoteThrottleServer.init()
-AnticheatServer.init()
 
 print("[CAG] Server initialized")
