@@ -49,4 +49,10 @@ SpawnServer.init()
 local RoundServer = require(script.RoundServer)
 RoundServer.init()
 
+-- ── Phase 5: Security (runs after everything) ──
+local RemoteThrottleServer = require(script.RemoteThrottleServer)
+local AnticheatServer = require(script.AnticheatServer)
+RemoteThrottleServer.init()
+AnticheatServer.init()
+
 print("[CAG] Server initialized")
