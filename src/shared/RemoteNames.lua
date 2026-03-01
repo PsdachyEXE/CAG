@@ -2,8 +2,12 @@
 local RemoteNames = {
 	-- Interact
 	ContainerInteract = "ContainerInteract",
-	LootReceived = "LootReceived",
 	InteractFailed = "InteractFailed",
+
+	-- Inventory
+	InventoryState = "InventoryState",           -- S→C: full container+player contents on open
+	ContainerTakeItem = "ContainerTakeItem",      -- C→S: take item at index from container
+	ItemTransferred = "ItemTransferred",           -- S→C: confirms transfer, sends updated state
 }
 
 return RemoteNames

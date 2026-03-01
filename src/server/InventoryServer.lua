@@ -1,8 +1,8 @@
 --[[
 	InventoryServer — per-player volatile inventory.
-	Max slots defined by Config.MAX_VOLATILE_SLOTS.
+	Max slots defined by Config.MAX_INVENTORY_SLOTS (16).
 	No DataStore — server-side table only.
-	Exports: addItem, getInventory, isFull, wipeInventory, init
+	Exports: addItem, getInventory, isFull, removeItem, wipeInventory, init
 ]]
 
 local Players = game:GetService("Players")
@@ -20,7 +20,7 @@ function InventoryServer.addItem(player: Player, item): boolean
 		return false
 	end
 
-	if #inv.items >= Config.MAX_VOLATILE_SLOTS then
+	if #inv.items >= Config.MAX_INVENTORY_SLOTS then
 		return false
 	end
 
@@ -32,6 +32,20 @@ function InventoryServer.addItem(player: Player, item): boolean
 		value = item.value or 0,
 	})
 
+	return true
+end
+
+function InventoryServer.removeItem(player: Player, index: number): boolean
+	local inv = inventories[player]
+	if not inv then
+		return false
+	end
+
+	if index < 1 or index > #inv.items then
+		return false
+	end
+
+	table.remove(inv.items, index)
 	return true
 end
 
@@ -48,7 +62,7 @@ function InventoryServer.isFull(player: Player): boolean
 	if not inv then
 		return true
 	end
-	return #inv.items >= Config.MAX_VOLATILE_SLOTS
+	return #inv.items >= Config.MAX_INVENTORY_SLOTS
 end
 
 function InventoryServer.wipeInventory(player: Player)
@@ -73,7 +87,7 @@ function InventoryServer.init()
 		inventories[player] = nil
 	end)
 
-	print("[CAG] InventoryServer initialized")
+	print("[CAG] InventoryServer initialized (max " .. Config.MAX_INVENTORY_SLOTS .. " slots)")
 end
 
 return InventoryServer

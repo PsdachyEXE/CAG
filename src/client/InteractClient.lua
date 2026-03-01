@@ -3,6 +3,7 @@
 	Shows a 48x48 BillboardGui prompt on the nearest container within range.
 	Only one prompt visible at a time. Fires ContainerInteract on E press.
 	0.5s cooldown after firing to prevent spam.
+	No longer handles loot directly — InventoryClient manages the UI panel.
 ]]
 
 local Players = game:GetService("Players")
@@ -25,7 +26,7 @@ local FADE_TIME = 0.15
 local currentTarget = nil   -- container currently showing prompt
 local promptGui = nil        -- single reusable BillboardGui
 local onCooldown = false
-local lootedSet = {}         -- [Instance] = true, containers we know are looted
+local emptySet = {}          -- [Instance] = true, containers with no loot left
 
 local function createPrompt(): BillboardGui
 	local billboard = Instance.new("BillboardGui")
@@ -40,22 +41,20 @@ local function createPrompt(): BillboardGui
 	local bg = Instance.new("Frame")
 	bg.Name = "BG"
 	bg.Size = UDim2.new(1, 0, 1, 0)
-	bg.BackgroundColor3 = Color3.fromRGB(26, 26, 46) -- #1A1A2E
-	bg.BackgroundTransparency = 0.25 -- 75% transparency
+	bg.BackgroundColor3 = Color3.fromRGB(26, 26, 46)
+	bg.BackgroundTransparency = 0.25
 	bg.Parent = billboard
 
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 6)
 	corner.Parent = bg
 
-	-- UIStroke: white, thickness 2
 	local stroke = Instance.new("UIStroke")
 	stroke.Name = "Border"
 	stroke.Color = Color3.new(1, 1, 1)
 	stroke.Thickness = 2
 	stroke.Parent = bg
 
-	-- UIGradient on the stroke: 0 at sides, 0.6 at corners
 	local gradient = Instance.new("UIGradient")
 	gradient.Transparency = NumberSequence.new({
 		NumberSequenceKeypoint.new(0, 0.6),
@@ -65,7 +64,6 @@ local function createPrompt(): BillboardGui
 	})
 	gradient.Parent = stroke
 
-	-- UIGradient on the frame: transparency 0 centre, 0.7 edges
 	local bgGradient = Instance.new("UIGradient")
 	bgGradient.Name = "BGGradient"
 	bgGradient.Transparency = NumberSequence.new({
@@ -76,7 +74,6 @@ local function createPrompt(): BillboardGui
 	})
 	bgGradient.Parent = bg
 
-	-- "E" text: FredokaOne, size 24, white, centred
 	local eLabel = Instance.new("TextLabel")
 	eLabel.Name = "KeyLabel"
 	eLabel.Size = UDim2.new(1, 0, 1, 0)
@@ -114,7 +111,6 @@ local function showPrompt(container)
 	promptGui.Parent = part
 	promptGui.Enabled = true
 
-	-- Fade in
 	local bg = promptGui:FindFirstChild("BG")
 	if bg then
 		bg.BackgroundTransparency = 1
@@ -182,7 +178,7 @@ local function findNearest(): Instance?
 	local nearestDist = INTERACT_RANGE + 1
 
 	for _, container in CollectionService:GetTagged("LootContainer") do
-		if lootedSet[container] then
+		if emptySet[container] then
 			continue
 		end
 
@@ -199,6 +195,16 @@ local function findNearest(): Instance?
 	end
 
 	return nearest
+end
+
+-- Called when container is fully emptied
+function InteractClient.markContainerEmpty(container: Instance)
+	if container then
+		emptySet[container] = true
+		if currentTarget == container then
+			hidePrompt()
+		end
+	end
 end
 
 function InteractClient.init()
@@ -224,9 +230,6 @@ function InteractClient.init()
 		end
 	end)
 
-	-- Track the last container we sent an interact for
-	local lastInteractedContainer = nil
-
 	-- E key to interact
 	UserInputService.InputBegan:Connect(function(input, processed)
 		if processed then
@@ -235,7 +238,6 @@ function InteractClient.init()
 		if input.KeyCode == Enum.KeyCode.E then
 			if currentTarget and not onCooldown then
 				onCooldown = true
-				lastInteractedContainer = currentTarget
 				interactRemote:FireServer(currentTarget)
 
 				task.spawn(function()
@@ -246,20 +248,9 @@ function InteractClient.init()
 		end
 	end)
 
-	-- When server confirms loot, mark that container as looted
-	remotes:WaitForChild(RemoteNames.LootReceived).OnClientEvent:Connect(function(_item)
-		if lastInteractedContainer then
-			lootedSet[lastInteractedContainer] = true
-			if currentTarget == lastInteractedContainer then
-				hidePrompt()
-			end
-			lastInteractedContainer = nil
-		end
-	end)
-
-	-- On InteractFailed with INVENTORY_FULL, also clear cooldown
+	-- InteractFailed — clear cooldown state
 	remotes:WaitForChild(RemoteNames.InteractFailed).OnClientEvent:Connect(function(_reason)
-		lastInteractedContainer = nil
+		-- InventoryClient handles the visual feedback
 	end)
 
 	print("[CAG] InteractClient initialized")
