@@ -16,6 +16,9 @@ local CombatFeedback = require(script.CombatFeedback)
 local HUDClient = require(script.HUDClient)
 
 local SquadClient = require(script.SquadClient)
+local SpectatorClient = require(script.SpectatorClient)
+local KillFeedClient = require(script.KillFeedClient)
+local LeaderboardClient = require(script.LeaderboardClient)
 
 SlideController.init()
 WeaponClient.init()
@@ -24,5 +27,8 @@ ExtractionClient.init()
 CombatFeedback.init()
 HUDClient.init(WeaponClient)
 SquadClient.init()
+SpectatorClient.init()
+KillFeedClient.init()
+LeaderboardClient.init()
 
 print("[CAG] Client initialized")
