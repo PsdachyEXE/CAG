@@ -26,6 +26,10 @@ PlayerDataServer.init()
 InventoryServer.init()
 LootTableServer.init()
 
+-- ── Phase 1b: Progression (wraps PlayerDataServer.addXP, must init before RoundServer) ──
+local ProgressionServer = require(script.ProgressionServer)
+ProgressionServer.init()
+
 -- ── Phase 2: Game systems ──
 local ContainerServer = require(script.ContainerServer)
 local AirdropServer = require(script.AirdropServer)
