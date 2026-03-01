@@ -1,13 +1,13 @@
 --[[
 	ExtractionServer — manages a circular extraction zone.
-	Players stand in the zone for Config.Extraction.Duration seconds to extract.
-	Triggers round-end on successful extraction. Includes wave reached in results.
+	Zone starts hidden. RoundServer calls activate() during extraction phase.
+	On extraction complete, calls onPlayerExtracted callback if set.
+	Exports: activate, deactivate, onPlayerExtracted (callback field)
 ]]
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
-local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local RemoteNames = require(ReplicatedStorage.Shared.RemoteNames)
@@ -15,10 +15,12 @@ local RemoteNames = require(ReplicatedStorage.Shared.RemoteNames)
 local ExtractionServer = {}
 
 local extractionZone = nil
+local zoneBillboard = nil
 local playersExtracting = {} -- [player] = startTick
+local active = false
 
--- Reference to AIServer for wave tracking (set during init)
-local AIServer = nil
+-- Callback set by RoundServer
+ExtractionServer.onPlayerExtracted = nil
 
 local function createExtractionZone()
 	local radius = Config.Extraction.ZoneRadius
@@ -27,21 +29,20 @@ local function createExtractionZone()
 	local zone = Instance.new("Part")
 	zone.Name = "ExtractionZone"
 	zone.Shape = Enum.PartType.Cylinder
-	-- Cylinder: X = height (thickness), Y/Z = diameter
 	zone.Size = Vector3.new(0.3, radius * 2, radius * 2)
-	zone.CFrame = CFrame.new(Config.Extraction.ZonePosition)
-		* CFrame.Angles(0, 0, math.rad(90)) -- lay flat
+	zone.CFrame = CFrame.new(Config.Extraction.ZonePosition) * CFrame.Angles(0, 0, math.rad(90))
 	zone.Anchored = true
 	zone.CanCollide = false
 	zone.Color = Config.Extraction.ZoneColor
 	zone.Material = Enum.Material.Neon
-	zone.Transparency = 0.3
+	zone.Transparency = 1 -- start hidden
 
 	-- Glow light
 	local light = Instance.new("PointLight")
 	light.Brightness = 3
 	light.Range = 30
 	light.Color = Config.Extraction.ZoneColor
+	light.Enabled = false
 	light.Parent = zone
 
 	-- Billboard label
@@ -50,6 +51,7 @@ local function createExtractionZone()
 	billboard.Size = UDim2.new(0, 200, 0, 50)
 	billboard.StudsOffset = Vector3.new(0, 10, 0)
 	billboard.AlwaysOnTop = true
+	billboard.Enabled = false
 	billboard.Parent = zone
 
 	local label = Instance.new("TextLabel")
@@ -64,22 +66,7 @@ local function createExtractionZone()
 	label.Parent = billboard
 
 	zone.Parent = workspace
-
-	-- Pulsing size tween loop
-	local baseSize = zone.Size
-	local pulseMin = baseSize * Config.Extraction.PulseMin
-	local pulseMax = baseSize * Config.Extraction.PulseMax
-	local tweenInfo = TweenInfo.new(
-		1 / Config.Extraction.PulseSpeed,
-		Enum.EasingStyle.Sine,
-		Enum.EasingDirection.InOut,
-		-1, -- repeat forever
-		true -- reverses
-	)
-
-	TweenService:Create(zone, tweenInfo, { Size = pulseMax }):Play()
-	-- Start from min for visible pulse
-	zone.Size = pulseMin
+	zoneBillboard = billboard
 
 	return zone
 end
@@ -96,7 +83,6 @@ local function isPlayerInZone(plr: Player): boolean
 		return false
 	end
 
-	-- Circular check on XZ plane
 	local zonePos = Config.Extraction.ZonePosition
 	local playerPos = hrp.Position
 	local dx = playerPos.X - zonePos.X
@@ -104,92 +90,128 @@ local function isPlayerInZone(plr: Player): boolean
 	local flatDist = math.sqrt(dx * dx + dz * dz)
 
 	return flatDist <= Config.Extraction.ZoneRadius
-		and math.abs(playerPos.Y - zonePos.Y) <= 8 -- vertical tolerance
+		and math.abs(playerPos.Y - zonePos.Y) <= 8
 end
 
-local function getWaveReached(): number
-	if AIServer and AIServer.getCurrentWave then
-		return AIServer.getCurrentWave()
+function ExtractionServer.activate()
+	if active then
+		return
 	end
-	return 0
+	active = true
+
+	if extractionZone then
+		-- Fade in zone
+		TweenService:Create(extractionZone, TweenInfo.new(0.5), { Transparency = 0.3 }):Play()
+
+		-- Enable light
+		local light = extractionZone:FindFirstChildOfClass("PointLight")
+		if light then
+			light.Enabled = true
+		end
+
+		-- Enable billboard
+		if zoneBillboard then
+			zoneBillboard.Enabled = true
+		end
+
+		-- Start pulsing
+		local baseSize = Vector3.new(0.3, Config.Extraction.ZoneRadius * 2, Config.Extraction.ZoneRadius * 2)
+		local pulseMax = baseSize * Config.Extraction.PulseMax
+		local tweenInfo = TweenInfo.new(
+			1 / Config.Extraction.PulseSpeed,
+			Enum.EasingStyle.Sine,
+			Enum.EasingDirection.InOut,
+			-1,
+			true
+		)
+		extractionZone.Size = baseSize * Config.Extraction.PulseMin
+		TweenService:Create(extractionZone, tweenInfo, { Size = pulseMax }):Play()
+	end
+
+	print("[CAG] Extraction zone activated")
 end
 
-local function onRoundEnd(plr: Player, extracted: boolean)
-	local roundRemotes = ReplicatedStorage:WaitForChild("RemoteEvents")
-	local roundEndRemote = roundRemotes:WaitForChild(RemoteNames.RoundEnd)
+function ExtractionServer.deactivate()
+	if not active then
+		return
+	end
+	active = false
 
-	roundEndRemote:FireAllClients({
-		playerName = plr.Name,
-		extracted = extracted,
-		xp = Config.Round.XPPlaceholder,
-		loot = Config.Round.LootPlaceholder,
-		streak = Config.Round.StreakPlaceholder,
-		waveReached = getWaveReached(),
-	})
+	-- Cancel all extractions
+	local remotes = ReplicatedStorage:FindFirstChild("RemoteEvents")
+	if remotes then
+		local cancelRemote = remotes:FindFirstChild(RemoteNames.ExtractionCancel)
+		for plr, _ in playersExtracting do
+			if cancelRemote then
+				cancelRemote:FireClient(plr)
+			end
+		end
+	end
+	playersExtracting = {}
 
-	print("[CAG] Round ended — " .. plr.Name .. (extracted and " extracted!" or " died.") .. " (wave " .. getWaveReached() .. ")")
+	if extractionZone then
+		-- Fade out zone
+		TweenService:Create(extractionZone, TweenInfo.new(0.5), { Transparency = 1 }):Play()
+
+		local light = extractionZone:FindFirstChildOfClass("PointLight")
+		if light then
+			light.Enabled = false
+		end
+
+		if zoneBillboard then
+			zoneBillboard.Enabled = false
+		end
+	end
+
+	print("[CAG] Extraction zone deactivated")
 end
 
 function ExtractionServer.init()
-	-- Get reference to AIServer for wave tracking
-	local serverModules = script.Parent
-	local aiModule = serverModules:FindFirstChild("AIServer")
-	if aiModule then
-		AIServer = require(aiModule)
-	end
-
 	extractionZone = createExtractionZone()
 
-	local extractRemotes = ReplicatedStorage:WaitForChild("RemoteEvents")
-	local progressRemote = extractRemotes:WaitForChild(RemoteNames.ExtractionProgress)
-	local completeRemote = extractRemotes:WaitForChild(RemoteNames.ExtractionComplete)
-	local cancelRemote = extractRemotes:WaitForChild(RemoteNames.ExtractionCancel)
+	local remotes = ReplicatedStorage:WaitForChild("RemoteEvents")
+	local progressRemote = remotes:WaitForChild(RemoteNames.ExtractionProgress)
+	local completeRemote = remotes:WaitForChild(RemoteNames.ExtractionComplete)
+	local cancelRemote = remotes:WaitForChild(RemoteNames.ExtractionCancel)
 
 	-- Monitor players in zone
 	task.spawn(function()
 		while true do
-			for _, plr in Players:GetPlayers() do
-				local inZone = isPlayerInZone(plr)
+			if active then
+				for _, plr in Players:GetPlayers() do
+					local inZone = isPlayerInZone(plr)
 
-				if inZone then
-					if not playersExtracting[plr] then
-						playersExtracting[plr] = tick()
-						extractRemotes:WaitForChild(RemoteNames.ExtractionStart):FireClient(plr)
-					else
-						local elapsed = tick() - playersExtracting[plr]
-						local progress = math.clamp(elapsed / Config.Extraction.Duration, 0, 1)
+					if inZone then
+						if not playersExtracting[plr] then
+							playersExtracting[plr] = tick()
+							remotes:WaitForChild(RemoteNames.ExtractionStart):FireClient(plr)
+						else
+							local elapsed = tick() - playersExtracting[plr]
+							local progress = math.clamp(elapsed / Config.Extraction.Duration, 0, 1)
 
-						progressRemote:FireClient(plr, progress)
+							progressRemote:FireClient(plr, progress)
 
-						if progress >= 1 then
-							playersExtracting[plr] = nil
-							completeRemote:FireClient(plr)
-							onRoundEnd(plr, true)
+							if progress >= 1 then
+								playersExtracting[plr] = nil
+								completeRemote:FireClient(plr)
+
+								-- Notify RoundServer via callback
+								if ExtractionServer.onPlayerExtracted then
+									ExtractionServer.onPlayerExtracted(plr)
+								end
+							end
 						end
-					end
-				else
-					if playersExtracting[plr] then
-						playersExtracting[plr] = nil
-						cancelRemote:FireClient(plr)
+					else
+						if playersExtracting[plr] then
+							playersExtracting[plr] = nil
+							cancelRemote:FireClient(plr)
+						end
 					end
 				end
 			end
 
 			task.wait(0.1)
 		end
-	end)
-
-	-- Handle player death during extraction
-	Players.PlayerAdded:Connect(function(plr)
-		plr.CharacterAdded:Connect(function(character)
-			local humanoid = character:WaitForChild("Humanoid")
-			humanoid.Died:Connect(function()
-				if playersExtracting[plr] then
-					playersExtracting[plr] = nil
-				end
-				onRoundEnd(plr, false)
-			end)
-		end)
 	end)
 
 	-- Cleanup on leave

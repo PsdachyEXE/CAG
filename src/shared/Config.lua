@@ -89,9 +89,14 @@ Config.Extraction = {
 -- Round
 Config.Round = {
 	EndScreenDuration = 10,
-	XPPlaceholder = 247,
-	StreakPlaceholder = 3,
-	LootPlaceholder = { "Rusty Pistol Skin", "Scrap Metal x5", "Mystery Crate" },
+	MatchDuration = 300, -- 5 minutes
+	ExtractionPhasePercent = 0.80,
+	MinPlayers = 1, -- 1 for testing, 2 for real
+	IntermissionDuration = 10,
+	XPParticipation = 50,
+	XPPerKill = 15,
+	XPExtraction = 100,
+	XPPerWave = 10,
 }
 
 -- HUD
@@ -105,6 +110,123 @@ Config.HUD = {
 	HealthMidThreshold = 0.6,
 	AmmoFlashColor = Color3.fromRGB(255, 60, 60),
 	MinimapSize = 140,
+}
+
+-- Loot
+Config.Loot = {
+	ContainerWeights = { Common = 55, Uncommon = 25, Rare = 12, Epic = 6, Legendary = 2 },
+	AIDropWeights = { Uncommon = 60, Rare = 25, Epic = 10, Legendary = 5 },
+	AirdropWeights = { Rare = 50, Epic = 35, Legendary = 15 },
+	AIDropChance = 0.40,
+}
+
+-- Airdrop
+Config.Airdrop = {
+	TriggerPercent = 0.60,
+	ETA = 15,
+	CrateLifetime = 90,
+	MapBoundsMin = Vector3.new(-100, 0, -100),
+	MapBoundsMax = Vector3.new(100, 0, 100),
+	CrateDropHeight = 100,
+}
+
+-- Inventory
+Config.Inventory = {
+	MaxVolatileSlots = 4,
+}
+
+-- Squad
+Config.Squad = {
+	MaxSize = 4,
+	XPBonus = 0.10,
+}
+
+-- Spawn
+Config.Spawn = {
+	MinSpawnDistance = 20,
+	SquadSpawnRadius = 30,
+	SpawnPositions = {
+		Vector3.new(80, 5, 80),
+		Vector3.new(-80, 5, 80),
+		Vector3.new(80, 5, -80),
+		Vector3.new(-80, 5, -80),
+		Vector3.new(100, 5, 0),
+		Vector3.new(-100, 5, 0),
+		Vector3.new(0, 5, 100),
+		Vector3.new(0, 5, -100),
+		Vector3.new(60, 5, 60),
+		Vector3.new(-60, 5, 60),
+		Vector3.new(60, 5, -60),
+		Vector3.new(-60, 5, -60),
+	},
+}
+
+-- Kill Feed
+Config.KillFeed = {
+	MaxEntries = 5,
+	EntryLifetime = 5,
+}
+
+-- Anticheat
+Config.Anticheat = {
+	MaxSpeedStuds = 32,
+	TeleportThreshold = 200,
+	RemoteSpamLimit = 20,
+	WeaponFireRateLimit = 15,
+	BanDuration = 3600,
+	MaxRetries = 3,
+}
+
+-- Remote Throttle
+Config.RemoteThrottle = {
+	DefaultLimit = 20,
+	WeaponFireLimit = 15,
+	ContainerInteractLimit = 2,
+	SquadActionLimit = 5,
+}
+
+-- Progression
+Config.Progression = {
+	LevelCap = 50,
+	XPCurveBase = 100,
+	XPCurveExponent = 1.4,
+}
+
+-- Notification
+Config.Notification = {
+	MaxVisible = 4,
+	HoldDuration = 3,
+	SlideInDuration = 0.2,
+	SlideOutDuration = 0.15,
+}
+
+-- UI Styling
+Config.UIStyle = {
+	PanelBG = Color3.fromRGB(26, 26, 46),
+	PanelBGTransparency = 0.15,
+	PanelBorderRed = Color3.fromRGB(233, 69, 96),
+	PanelBorderBlue = Color3.fromRGB(15, 52, 96),
+	TextPrimary = Color3.fromRGB(255, 255, 255),
+	TextSecondary = Color3.fromRGB(160, 160, 176),
+	Positive = Color3.fromRGB(76, 175, 80),
+	Negative = Color3.fromRGB(244, 67, 54),
+	Highlight = Color3.fromRGB(233, 69, 96),
+	CornerRadius = UDim.new(0, 8),
+	Padding = 12,
+	DropShadowColor = Color3.fromRGB(0, 0, 0),
+	DropShadowTransparency = 0.4,
+	DropShadowThickness = 2,
+	SlideInTime = 0.2,
+	FadeTime = 0.15,
+	ButtonHoverScale = 1.05,
+	ButtonPressScale = 0.95,
+	RarityColors = {
+		Common = Color3.fromRGB(155, 155, 155),
+		Uncommon = Color3.fromRGB(76, 175, 80),
+		Rare = Color3.fromRGB(33, 150, 243),
+		Epic = Color3.fromRGB(156, 39, 176),
+		Legendary = Color3.fromRGB(255, 152, 0),
+	},
 }
 
 return Config

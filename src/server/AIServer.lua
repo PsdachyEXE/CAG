@@ -2,6 +2,7 @@
 	AIServer — spawns AI enemies in waves, handles pathfinding with stuck detection,
 	separation steering, flanking after LOS timeout, stagger on hit, death scatter,
 	and wave-based scaling (size + speed).
+	Exports: getCurrentWave, startWaves, stopWaves, reset
 ]]
 
 local Players = game:GetService("Players")
@@ -16,6 +17,8 @@ local AIServer = {}
 local activeAIs = {}
 local remotes
 local currentWave = 0
+local waveLoopActive = false
+local RoundServerRef = nil
 
 function AIServer.getCurrentWave(): number
 	return currentWave
@@ -54,10 +57,10 @@ local function createAIModel(waveNumber: number)
 	headWeld.Parent = torso
 
 	local limbData = {
-		{ "Left Arm",  CFrame.new(-1.5, 0, 0) },
-		{ "Right Arm", CFrame.new(1.5, 0, 0)  },
-		{ "Left Leg",  CFrame.new(-0.5, -2, 0) },
-		{ "Right Leg", CFrame.new(0.5, -2, 0)  },
+		{ "Left Arm", CFrame.new(-1.5, 0, 0) },
+		{ "Right Arm", CFrame.new(1.5, 0, 0) },
+		{ "Left Leg", CFrame.new(-0.5, -2, 0) },
+		{ "Right Leg", CFrame.new(0.5, -2, 0) },
 	}
 
 	for _, info in limbData do
@@ -192,9 +195,8 @@ local function runAI(aiData)
 		if now - aiData.lastStuckCheck >= Config.AI.StuckTimeout then
 			local dist = (rootPart.Position - aiData.lastStuckPos).Magnitude
 			if dist < Config.AI.StuckThreshold then
-				-- Stuck — jump and force re-path
 				humanoid.Jump = true
-				aiData.lastPathfind = 0 -- force new path
+				aiData.lastPathfind = 0
 			end
 			aiData.lastStuckCheck = now
 			aiData.lastStuckPos = rootPart.Position
@@ -247,21 +249,17 @@ local function runAI(aiData)
 	local canSee = hasLineOfSight(rootPart.Position, targetHRP.Position, model)
 
 	if canSee then
-		-- Reset LOS lost timer when we can see the target
 		aiData.losLostTime = nil
 	else
-		-- Track how long LOS has been lost
 		if not aiData.losLostTime then
 			aiData.losLostTime = now
 		end
-
-		-- Only flank after LOS lost for FlankLOSTimeout seconds
 		if now - aiData.losLostTime >= Config.AI.FlankLOSTimeout then
 			destination = getFlankPosition(rootPart.Position, targetHRP.Position)
 		end
 	end
 
-	-- Apply separation steering to destination
+	-- Apply separation steering
 	local sepForce = getSeparationForce(aiData)
 	if sepForce.Magnitude > 0.1 then
 		destination = destination + Vector3.new(sepForce.X, 0, sepForce.Z)
@@ -293,7 +291,6 @@ local function runAI(aiData)
 			humanoid.MoveToFinished:Wait()
 		end
 	else
-		-- Fallback: move directly toward target
 		humanoid:MoveTo(destination)
 	end
 end
@@ -306,7 +303,6 @@ local function scatterDeathParts(model: Model)
 
 	local origin = rootPart.Position
 
-	-- Break welds on all non-root parts
 	for _, part in model:GetDescendants() do
 		if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
 			for _, child in part:GetChildren() do
@@ -317,14 +313,12 @@ local function scatterDeathParts(model: Model)
 		end
 	end
 
-	-- Break welds on root
 	for _, child in rootPart:GetChildren() do
 		if child:IsA("Weld") or child:IsA("WeldConstraint") then
 			child:Destroy()
 		end
 	end
 
-	-- Apply scatter forces
 	for _, part in model:GetDescendants() do
 		if part:IsA("BasePart") then
 			part.Anchored = false
@@ -345,7 +339,6 @@ local function scatterDeathParts(model: Model)
 				)
 
 			part:ApplyImpulse(scatter * part.Mass)
-
 			part:ApplyAngularImpulse(Vector3.new(
 				(math.random() - 0.5) * 30,
 				(math.random() - 0.5) * 30,
@@ -354,7 +347,6 @@ local function scatterDeathParts(model: Model)
 		end
 	end
 
-	-- Clean up after delay
 	task.spawn(function()
 		task.wait(Config.AI.DeathScatterLifetime)
 		if model.Parent then
@@ -420,6 +412,17 @@ local function spawnAI(position: Vector3, waveNumber: number)
 
 		scatterDeathParts(model)
 
+		-- Notify RoundServer of AI kill (credit closest player)
+		if RoundServerRef then
+			local rootPart = model.PrimaryPart
+			if rootPart then
+				local killer = getClosestPlayer(rootPart.Position)
+				if killer then
+					RoundServerRef.onPlayerKill(killer, "AI")
+				end
+			end
+		end
+
 		for i, data in activeAIs do
 			if data == aiData then
 				table.remove(activeAIs, i)
@@ -443,7 +446,6 @@ local function spawnWave()
 	local positions = Config.AI.SpawnPositions
 	waveSize = math.min(waveSize, #positions)
 
-	-- Shuffle and pick spawn points
 	local shuffled = table.clone(positions)
 	for i = #shuffled, 2, -1 do
 		local j = math.random(1, i)
@@ -454,31 +456,85 @@ local function spawnWave()
 		spawnAI(shuffled[i], currentWave)
 	end
 
-	print("[CAG] Wave " .. currentWave .. " spawned: " .. waveSize .. " enemies (speed +" .. ((currentWave - 1) * Config.AI.SpeedScalePerWave) .. ")")
+	print(
+		"[CAG] Wave "
+			.. currentWave
+			.. " spawned: "
+			.. waveSize
+			.. " enemies (speed +"
+			.. ((currentWave - 1) * Config.AI.SpeedScalePerWave)
+			.. ")"
+	)
+end
+
+-- ── Public API ───────────────────────────────────────────
+
+function AIServer.startWaves()
+	if waveLoopActive then
+		return
+	end
+	waveLoopActive = true
+
+	-- Spawn initial wave
+	spawnWave()
+
+	-- Continuous wave spawner
+	task.spawn(function()
+		while waveLoopActive do
+			task.wait(Config.AI.WaveInterval)
+			if waveLoopActive then
+				spawnWave()
+			end
+		end
+	end)
+
+	print("[CAG] AI wave spawning started")
+end
+
+function AIServer.stopWaves()
+	waveLoopActive = false
+	print("[CAG] AI wave spawning stopped")
+end
+
+function AIServer.reset()
+	waveLoopActive = false
+	currentWave = 0
+
+	-- Destroy all active AI
+	for _, aiData in activeAIs do
+		aiData.alive = false
+		if aiData.model and aiData.model.Parent then
+			aiData.model:Destroy()
+		end
+	end
+	activeAIs = {}
+
+	print("[CAG] AI system reset")
 end
 
 function AIServer.init()
 	remotes = ReplicatedStorage:WaitForChild("RemoteEvents")
 
-	-- Wait for at least one player
-	if #Players:GetPlayers() == 0 then
-		Players.PlayerAdded:Wait()
+	-- Get RoundServer reference for kill notification
+	local serverModules = script.Parent
+	local roundModule = serverModules:FindFirstChild("RoundServer")
+	if roundModule then
+		RoundServerRef = require(roundModule)
 	end
 
-	task.wait(2)
+	-- Do NOT auto-start waves — RoundServer calls startWaves()
+	-- If no RoundServer exists, auto-start as fallback
+	if not RoundServerRef then
+		task.spawn(function()
+			if #Players:GetPlayers() == 0 then
+				Players.PlayerAdded:Wait()
+			end
+			task.wait(2)
+			AIServer.startWaves()
+		end)
+	end
 
-	-- Spawn initial wave
-	spawnWave()
-
-	-- Wave spawner loop
-	task.spawn(function()
-		while true do
-			task.wait(Config.AI.WaveInterval)
-			spawnWave()
-		end
-	end)
-
-	print("[CAG] AI wave system initialized")
+	print("[CAG] AI system initialized")
 end
 
 return AIServer

@@ -1,5 +1,6 @@
 --[[
 	Server bootstrap — creates remote events and initializes all server systems.
+	Init order matters: data systems first, then game systems, then coordinator.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -16,13 +17,30 @@ for _, name in RemoteNames do
 	end
 end
 
--- Initialize server modules
+-- ── Phase 1: Data systems (no server deps) ──
+local PlayerDataServer = require(script.PlayerDataServer)
+local InventoryServer = require(script.InventoryServer)
+local LootTableServer = require(script.LootTableServer)
+
+PlayerDataServer.init()
+InventoryServer.init()
+LootTableServer.init()
+
+-- ── Phase 2: Game systems ──
+local ContainerServer = require(script.ContainerServer)
+local AirdropServer = require(script.AirdropServer)
 local WeaponServer = require(script.WeaponServer)
 local AIServer = require(script.AIServer)
 local ExtractionServer = require(script.ExtractionServer)
 
+ContainerServer.init()
+AirdropServer.init()
 WeaponServer.init()
 AIServer.init()
 ExtractionServer.init()
+
+-- ── Phase 3: Round coordinator (depends on all above) ──
+local RoundServer = require(script.RoundServer)
+RoundServer.init()
 
 print("[CAG] Server initialized")

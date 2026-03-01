@@ -13,6 +13,7 @@ local RemoteNames = {
 
 	-- Player feedback
 	PlayerDamaged = "PlayerDamaged",
+	PlayerEliminated = "PlayerEliminated",
 
 	-- Extraction
 	ExtractionStart = "ExtractionStart",
@@ -23,6 +24,50 @@ local RemoteNames = {
 	-- Round
 	RoundEnd = "RoundEnd",
 	PlayAgain = "PlayAgain",
+	RoundStateChanged = "RoundStateChanged",
+	MatchTimeUpdate = "MatchTimeUpdate",
+	PlayerReady = "PlayerReady",
+
+	-- Inventory
+	VolatileItemsLost = "VolatileItemsLost",
+	VolatileItemsExtracted = "VolatileItemsExtracted",
+	InventoryUpdate = "InventoryUpdate",
+
+	-- Loot
+	LootReceived = "LootReceived",
+	ContainerLooted = "ContainerLooted",
+	ContainerInteract = "ContainerInteract",
+
+	-- Airdrop
+	AirdropIncoming = "AirdropIncoming",
+	AirdropLanded = "AirdropLanded",
+
+	-- Squad
+	CreateSquad = "CreateSquad",
+	InviteToSquad = "InviteToSquad",
+	AcceptSquadInvite = "AcceptSquadInvite",
+	DeclineSquadInvite = "DeclineSquadInvite",
+	LeaveSquad = "LeaveSquad",
+	SquadUpdate = "SquadUpdate",
+	SquadMemberDied = "SquadMemberDied",
+	SquadHealthUpdate = "SquadHealthUpdate",
+	SquadInviteReceived = "SquadInviteReceived",
+
+	-- Spectator
+	SpectatorTarget = "SpectatorTarget",
+
+	-- Kill feed
+	KillFeedEntry = "KillFeedEntry",
+
+	-- Leaderboard
+	LeaderboardUpdate = "LeaderboardUpdate",
+
+	-- Progression
+	LevelUp = "LevelUp",
+	XPGained = "XPGained",
+
+	-- Notification
+	ShowNotification = "ShowNotification",
 }
 
 return RemoteNames

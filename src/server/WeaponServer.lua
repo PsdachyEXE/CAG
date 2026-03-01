@@ -1,6 +1,7 @@
 --[[
 	WeaponServer — validates raycast hits from clients, applies damage,
 	replicates hit feedback + damage numbers, and notifies kill events.
+	Tracks last-hit player on AI for kill credit.
 ]]
 
 local Players = game:GetService("Players")
@@ -10,6 +11,13 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local RemoteNames = require(ReplicatedStorage.Shared.RemoteNames)
 
 local WeaponServer = {}
+
+-- Track who last hit each AI model for accurate kill credit
+local lastHitBy = {} -- [model] = player
+
+function WeaponServer.getLastHitBy(model: Model): Player?
+	return lastHitBy[model]
+end
 
 function WeaponServer.init()
 	local remotes = ReplicatedStorage:WaitForChild("RemoteEvents")
@@ -65,6 +73,11 @@ function WeaponServer.init()
 		humanoid:TakeDamage(damage)
 		local killed = wasAlive and humanoid.Health <= 0
 
+		-- Track who last hit this AI
+		if hitModel.Name == "AIEnemy" then
+			lastHitBy[hitModel] = player
+		end
+
 		-- Send hit confirm back to the shooter (for hit marker)
 		hitConfirmRemote:FireClient(player, hitPosition, isHeadshot, killed)
 
@@ -74,6 +87,14 @@ function WeaponServer.init()
 		-- Trigger stagger on AI
 		if hitModel.Name == "AIEnemy" then
 			aiStaggerRemote:FireAllClients(hitModel)
+		end
+
+		-- Clean up last-hit tracking on kill (delayed cleanup)
+		if killed and hitModel.Name == "AIEnemy" then
+			task.spawn(function()
+				task.wait(5)
+				lastHitBy[hitModel] = nil
+			end)
 		end
 	end)
 end
