@@ -206,36 +206,24 @@ local function refreshBoard(data)
 	end
 end
 
+function LeaderboardClient.toggle()
+	isVisible = not isVisible
+	if screenGui then
+		screenGui.Enabled = isVisible
+		if isVisible then
+			refreshBoard(leaderboardData)
+		end
+	end
+end
+
+function LeaderboardClient.isVisible()
+	return isVisible
+end
+
 function LeaderboardClient.init()
 	createLeaderboardUI()
 
 	local remotes = ReplicatedStorage:WaitForChild("RemoteEvents")
-
-	-- Tab toggle
-	UserInputService.InputBegan:Connect(function(input, processed)
-		if processed then
-			return
-		end
-		if input.KeyCode == Enum.KeyCode.Tab then
-			isVisible = not isVisible
-			if screenGui then
-				screenGui.Enabled = isVisible
-				if isVisible then
-					refreshBoard(leaderboardData)
-				end
-			end
-		end
-	end)
-
-	-- Auto-hide on release (hold to view)
-	UserInputService.InputEnded:Connect(function(input)
-		if input.KeyCode == Enum.KeyCode.Tab then
-			isVisible = false
-			if screenGui then
-				screenGui.Enabled = false
-			end
-		end
-	end)
 
 	-- Leaderboard data updates
 	remotes:WaitForChild(RemoteNames.LeaderboardUpdate).OnClientEvent:Connect(function(data)

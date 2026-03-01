@@ -43,6 +43,10 @@ WeaponServer.init()
 AIServer.init()
 ExtractionServer.init()
 
+-- ── Phase 2b: Interact system (depends on LootTableServer, InventoryServer, ContainerServer) ──
+local InteractServer = require(script.InteractServer)
+InteractServer.init()
+
 -- ── Phase 3: Squad & Spawn ──
 local SquadServer = require(script.SquadServer)
 local SpawnServer = require(script.SpawnServer)

@@ -250,12 +250,12 @@ function InventoryClient.init()
 
 	local remotes = ReplicatedStorage:WaitForChild("RemoteEvents")
 
-	-- Toggle with I key
+	-- Toggle with Tab key
 	UserInputService.InputBegan:Connect(function(input, processed)
 		if processed then
 			return
 		end
-		if input.KeyCode == Enum.KeyCode.I then
+		if input.KeyCode == Enum.KeyCode.Tab then
 			isOpen = not isOpen
 			if screenGui then
 				screenGui.Enabled = isOpen

@@ -438,6 +438,65 @@ function RoundServer.getPlayerKills(player: Player): number
 	return playerKills[player] or 0
 end
 
+-- ── Demo mode control ────────────────────────────────────
+
+local InteractServerRef = nil
+
+function RoundServer.stop()
+	-- Stop the round timer and all sub-systems
+	roundActive = false
+	currentState = ROUND_STATE.Waiting
+
+	if AIServer and AIServer.stop then
+		AIServer.stop()
+	end
+	if ExtractionServer and ExtractionServer.stop then
+		ExtractionServer.stop()
+	end
+	if AirdropServer and AirdropServer.stop then
+		AirdropServer.stop()
+	end
+	if ContainerServer and ContainerServer.stop then
+		ContainerServer.stop()
+	end
+	if InteractServerRef and InteractServerRef.resetContainers then
+		InteractServerRef.resetContainers()
+	end
+
+	playerKills = {}
+	alivePlayers = {}
+	extractedPlayers = {}
+	airdropTriggered = false
+	extractionActivated = false
+
+	fireStateChange(ROUND_STATE.Waiting)
+	print("[CAG] RoundServer stopped (demo mode OFF)")
+end
+
+function RoundServer.start()
+	-- Restart all sub-systems cleanly from initial state
+	if AIServer and AIServer.start then
+		-- AI waves start via _startRound
+	end
+	if ExtractionServer and ExtractionServer.start then
+		ExtractionServer.start()
+	end
+	if AirdropServer and AirdropServer.start then
+		AirdropServer.start()
+	end
+	if ContainerServer and ContainerServer.start then
+		ContainerServer.start()
+	end
+	if InteractServerRef and InteractServerRef.resetContainers then
+		InteractServerRef.resetContainers()
+	end
+
+	currentState = ROUND_STATE.Waiting
+	fireStateChange(ROUND_STATE.Waiting)
+	RoundServer._checkStart()
+	print("[CAG] RoundServer started (demo mode ON)")
+end
+
 -- ── Init ─────────────────────────────────────────────────
 
 function RoundServer.init()
@@ -534,6 +593,29 @@ function RoundServer.init()
 	Players.PlayerAdded:Connect(function(_player)
 		task.wait(2) -- give time for data to load
 		RoundServer._checkStart()
+	end)
+
+	-- Get InteractServer reference (may not exist yet, lazy resolve)
+	task.spawn(function()
+		task.wait(1)
+		local intModule = serverModules:FindFirstChild("InteractServer")
+		if intModule then
+			InteractServerRef = require(intModule)
+		end
+	end)
+
+	-- Demo mode toggle listener
+	local demoRemote = remotes:WaitForChild(RemoteNames.DemoModeChanged)
+	demoRemote.OnServerEvent:Connect(function(_player, enabled)
+		if type(enabled) ~= "boolean" then
+			return
+		end
+
+		if enabled then
+			RoundServer.start()
+		else
+			RoundServer.stop()
+		end
 	end)
 
 	print("[CAG] RoundServer initialized")

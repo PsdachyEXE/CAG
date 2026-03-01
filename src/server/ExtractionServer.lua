@@ -166,6 +166,27 @@ function ExtractionServer.deactivate()
 	print("[CAG] Extraction zone deactivated")
 end
 
+function ExtractionServer.stop()
+	ExtractionServer.deactivate()
+end
+
+function ExtractionServer.start()
+	-- Extraction zone resets to hidden/ready state
+	-- RoundServer calls activate() when extraction phase begins
+	if extractionZone then
+		extractionZone.Transparency = 1
+		local light = extractionZone:FindFirstChildOfClass("PointLight")
+		if light then
+			light.Enabled = false
+		end
+		if zoneBillboard then
+			zoneBillboard.Enabled = false
+		end
+	end
+	active = false
+	playersExtracting = {}
+end
+
 function ExtractionServer.init()
 	extractionZone = createExtractionZone()
 

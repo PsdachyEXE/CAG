@@ -512,6 +512,14 @@ function AIServer.reset()
 	print("[CAG] AI system reset")
 end
 
+function AIServer.stop()
+	AIServer.reset()
+end
+
+function AIServer.start()
+	AIServer.startWaves()
+end
+
 function AIServer.init()
 	remotes = ReplicatedStorage:WaitForChild("RemoteEvents")
 

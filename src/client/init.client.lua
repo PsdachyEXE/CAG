@@ -25,6 +25,9 @@ local NotificationClient = require(script.NotificationClient)
 local AirdropClient = require(script.AirdropClient)
 local MainMenuClient = require(script.MainMenuClient)
 
+local InteractClient = require(script.InteractClient)
+local DemoToggleClient = require(script.ui.DemoToggleClient)
+
 SlideController.init()
 WeaponClient.init()
 DamageNumbers.init()
@@ -39,5 +42,7 @@ InventoryClient.init()
 NotificationClient.init()
 AirdropClient.init()
 MainMenuClient.init()
+InteractClient.init()
+DemoToggleClient.init(LeaderboardClient)
 
 print("[CAG] Client initialized")

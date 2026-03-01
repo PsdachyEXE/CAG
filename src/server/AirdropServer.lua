@@ -216,6 +216,15 @@ function AirdropServer.reset()
 	airdropCrate = nil
 end
 
+function AirdropServer.stop()
+	AirdropServer.reset()
+end
+
+function AirdropServer.start()
+	-- Airdrop resets to idle; RoundServer triggers at 60% match time
+	AirdropServer.reset()
+end
+
 function AirdropServer.init()
 	local serverModules = script.Parent
 	local lootModule = serverModules:FindFirstChild("LootTableServer")

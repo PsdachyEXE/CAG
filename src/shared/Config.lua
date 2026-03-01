@@ -135,6 +135,16 @@ Config.Inventory = {
 	MaxVolatileSlots = 4,
 }
 
+-- Interact
+Config.Interact = {
+	INTERACT_RANGE = 6,
+	SERVER_RANGE = 8,
+	LOOT_LOCK_TIME = 0.5,
+}
+
+-- Demo mode
+Config.isDemoMode = true
+
 -- Squad
 Config.Squad = {
 	MaxSize = 4,

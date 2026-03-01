@@ -68,6 +68,12 @@ local RemoteNames = {
 
 	-- Notification
 	ShowNotification = "ShowNotification",
+
+	-- Demo mode
+	DemoModeChanged = "DemoModeChanged",
+
+	-- Interact
+	InteractFailed = "InteractFailed",
 }
 
 return RemoteNames

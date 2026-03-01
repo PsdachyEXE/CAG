@@ -1,28 +1,33 @@
 --[[
 	ContainerServer — manages loot containers placed around the map.
-	States: Closed / Open / Looted
-	Proximity-based interaction (no click required).
-	Containers reset on new round via resetContainers().
+	Responsibilities:
+	  - Tags Workspace containers with CollectionService "LootContainer"
+	  - Spawns programmatic containers at fixed positions (demo mode)
+	  - Resets containers on round start
+	  - stop/start for demo mode toggle
+	Loot rolling and interaction handled by InteractServer.
 ]]
 
+local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
-local Players = game:GetService("Players")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local RemoteNames = require(ReplicatedStorage.Shared.RemoteNames)
 
 local ContainerServer = {}
 
--- Module references (set during init)
-local LootTableServer = nil
-local InventoryServer = nil
+local CONTAINER_TAG = "LootContainer"
 
-local containers = {} -- [containerID] = { part, lid, billboard, state, position }
-local INTERACT_DISTANCE = 6
-local CONTAINER_STATE = { Closed = "Closed", Open = "Open", Looted = "Looted" }
+-- Valid container names that get tagged in Workspace
+local VALID_CONTAINER_NAMES = {
+	ContainerLarge = true,
+	ContainerMedium = true,
+	ContainerSmall = true,
+}
 
--- Fixed container positions around the map
+-- Programmatic container tracking (demo mode containers)
+local spawnedContainers = {} -- [part] = true
 local CONTAINER_POSITIONS = {
 	Vector3.new(20, 1, 20),
 	Vector3.new(-20, 1, 20),
@@ -36,191 +41,93 @@ local CONTAINER_POSITIONS = {
 	Vector3.new(-30, 1, -30),
 }
 
-local function createContainer(id: string, position: Vector3)
+local function createProgrammaticContainer(position: Vector3)
 	local part = Instance.new("Part")
-	part.Name = "Container_" .. id
+	part.Name = "ContainerMedium"
 	part.Size = Vector3.new(3, 2, 2)
 	part.Position = position
 	part.Anchored = true
 	part.CanCollide = true
 	part.Color = Color3.fromRGB(120, 80, 40)
 	part.Material = Enum.Material.Wood
-
-	-- Lid
-	local lid = Instance.new("Part")
-	lid.Name = "Lid"
-	lid.Size = Vector3.new(3, 0.3, 2)
-	lid.CFrame = CFrame.new(position + Vector3.new(0, 1.15, 0))
-	lid.Anchored = true
-	lid.CanCollide = false
-	lid.Color = Color3.fromRGB(100, 65, 30)
-	lid.Material = Enum.Material.Wood
-	lid.Parent = part
-
-	-- Billboard indicator
-	local billboard = Instance.new("BillboardGui")
-	billboard.Name = "Indicator"
-	billboard.Size = UDim2.new(0, 80, 0, 30)
-	billboard.StudsOffset = Vector3.new(0, 3, 0)
-	billboard.AlwaysOnTop = true
-	billboard.MaxDistance = 30
-	billboard.Parent = part
-
-	local label = Instance.new("TextLabel")
-	label.Size = UDim2.new(1, 0, 1, 0)
-	label.BackgroundTransparency = 1
-	label.Text = "LOOT"
-	label.TextColor3 = Color3.fromRGB(255, 220, 50)
-	label.TextStrokeTransparency = 0
-	label.TextStrokeColor3 = Color3.fromRGB(80, 60, 0)
-	label.Font = Enum.Font.FredokaOne
-	label.TextScaled = true
-	label.Parent = billboard
-
 	part.Parent = workspace
 
-	containers[id] = {
-		part = part,
-		lid = lid,
-		billboard = billboard,
-		state = CONTAINER_STATE.Closed,
-		position = position,
-		closedLidCF = CFrame.new(position + Vector3.new(0, 1.15, 0)),
-	}
+	-- Tag it as loot container
+	CollectionService:AddTag(part, CONTAINER_TAG)
+	spawnedContainers[part] = true
+
+	return part
 end
 
-local function openContainer(containerID: string, player: Player)
-	local container = containers[containerID]
-	if not container or container.state ~= CONTAINER_STATE.Closed then
-		return
+local function destroyProgrammaticContainers()
+	for part, _ in spawnedContainers do
+		if part and part.Parent then
+			CollectionService:RemoveTag(part, CONTAINER_TAG)
+			part:Destroy()
+		end
 	end
+	spawnedContainers = {}
+end
 
-	container.state = CONTAINER_STATE.Open
-
-	-- Animate lid opening (hinge at back edge)
-	local lid = container.lid
-	if lid then
-		local openCF = container.closedLidCF
-			* CFrame.new(0, 0, -1) -- pivot to back edge
-			* CFrame.Angles(math.rad(-110), 0, 0)
-			* CFrame.new(0, 0, 1)
-		TweenService:Create(lid, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-			CFrame = openCF,
-		}):Play()
+local function spawnProgrammaticContainers()
+	for _, pos in CONTAINER_POSITIONS do
+		createProgrammaticContainer(pos)
 	end
+end
 
-	-- Roll loot
-	if LootTableServer then
-		local item = LootTableServer.rollLoot("container", player)
-		if item and InventoryServer then
-			local added = InventoryServer.addItem(player, item)
-			if not added then
-				-- Inventory full notification
-				local remotes = ReplicatedStorage:FindFirstChild("RemoteEvents")
-				if remotes then
-					local notifRemote = remotes:FindFirstChild(RemoteNames.ShowNotification)
-					if notifRemote then
-						notifRemote:FireClient(player, {
-							type = "warning",
-							text = "Inventory full!",
-						})
-					end
-				end
+local function tagWorkspaceContainers()
+	-- Scan Workspace for parts/models with valid container names and tag them
+	for _, obj in workspace:GetDescendants() do
+		if VALID_CONTAINER_NAMES[obj.Name] then
+			if not CollectionService:HasTag(obj, CONTAINER_TAG) then
+				CollectionService:AddTag(obj, CONTAINER_TAG)
 			end
 		end
 	end
 
-	container.state = CONTAINER_STATE.Looted
-
-	-- Dim the indicator
-	local billboard = container.billboard
-	if billboard then
-		local label = billboard:FindFirstChildOfClass("TextLabel")
-		if label then
-			label.Text = "EMPTY"
-			label.TextColor3 = Color3.fromRGB(120, 120, 120)
+	-- Watch for new containers added to Workspace
+	workspace.DescendantAdded:Connect(function(obj)
+		if VALID_CONTAINER_NAMES[obj.Name] then
+			if not CollectionService:HasTag(obj, CONTAINER_TAG) then
+				CollectionService:AddTag(obj, CONTAINER_TAG)
+			end
 		end
-	end
+	end)
 end
 
 function ContainerServer.resetContainers()
-	for _, container in containers do
-		container.state = CONTAINER_STATE.Closed
+	-- Destroy and re-create programmatic containers
+	destroyProgrammaticContainers()
+	spawnProgrammaticContainers()
 
-		-- Reset lid to closed position
-		local lid = container.lid
-		if lid and container.closedLidCF then
-			lid.CFrame = container.closedLidCF
-		end
+	-- Re-tag any Workspace containers that may have lost tags
+	tagWorkspaceContainers()
 
-		-- Reset indicator
-		local billboard = container.billboard
-		if billboard then
-			local label = billboard:FindFirstChildOfClass("TextLabel")
-			if label then
-				label.Text = "LOOT"
-				label.TextColor3 = Color3.fromRGB(255, 220, 50)
-			end
-		end
-	end
 	print("[CAG] Containers reset")
 end
 
-function ContainerServer.getContainerState(containerID: string): string?
-	local container = containers[containerID]
-	if not container then
-		return nil
-	end
-	return container.state
+function ContainerServer.stop()
+	-- Demo mode OFF: destroy only programmatic containers
+	destroyProgrammaticContainers()
+	print("[CAG] ContainerServer stopped")
+end
+
+function ContainerServer.start()
+	-- Demo mode ON: re-spawn programmatic containers and re-tag
+	spawnProgrammaticContainers()
+	tagWorkspaceContainers()
+	print("[CAG] ContainerServer started")
 end
 
 function ContainerServer.init()
-	-- Resolve module references
-	local serverModules = script.Parent
-	local lootModule = serverModules:FindFirstChild("LootTableServer")
-	if lootModule then
-		LootTableServer = require(lootModule)
-	end
-	local invModule = serverModules:FindFirstChild("InventoryServer")
-	if invModule then
-		InventoryServer = require(invModule)
-	end
+	-- Tag existing Workspace containers
+	tagWorkspaceContainers()
 
-	-- Create containers at fixed positions
-	for i, pos in CONTAINER_POSITIONS do
-		createContainer("crate_" .. i, pos)
-	end
+	-- Spawn programmatic containers at fixed positions
+	spawnProgrammaticContainers()
 
-	-- Proximity-based interaction loop
-	task.spawn(function()
-		while true do
-			for _, player in Players:GetPlayers() do
-				local character = player.Character
-				if not character then
-					continue
-				end
-				local hrp = character:FindFirstChild("HumanoidRootPart")
-				if not hrp then
-					continue
-				end
-
-				for id, container in containers do
-					if container.state ~= CONTAINER_STATE.Closed then
-						continue
-					end
-
-					local dist = (hrp.Position - container.position).Magnitude
-					if dist <= INTERACT_DISTANCE then
-						openContainer(id, player)
-					end
-				end
-			end
-
-			task.wait(0.2)
-		end
-	end)
-
-	print("[CAG] ContainerServer initialized (" .. #CONTAINER_POSITIONS .. " containers)")
+	local totalTagged = #CollectionService:GetTagged(CONTAINER_TAG)
+	print("[CAG] ContainerServer initialized (" .. totalTagged .. " containers tagged)")
 end
 
 return ContainerServer
