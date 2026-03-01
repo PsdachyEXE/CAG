@@ -15,11 +15,14 @@ local ExtractionClient = require(script.ExtractionClient)
 local CombatFeedback = require(script.CombatFeedback)
 local HUDClient = require(script.HUDClient)
 
+local SquadClient = require(script.SquadClient)
+
 SlideController.init()
 WeaponClient.init()
 DamageNumbers.init()
 ExtractionClient.init()
 CombatFeedback.init()
 HUDClient.init(WeaponClient)
+SquadClient.init()
 
 print("[CAG] Client initialized")

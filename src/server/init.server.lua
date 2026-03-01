@@ -39,7 +39,11 @@ WeaponServer.init()
 AIServer.init()
 ExtractionServer.init()
 
--- ── Phase 3: Round coordinator (depends on all above) ──
+-- ── Phase 3: Squad system ──
+local SquadServer = require(script.SquadServer)
+SquadServer.init()
+
+-- ── Phase 4: Round coordinator (depends on all above) ──
 local RoundServer = require(script.RoundServer)
 RoundServer.init()
 
