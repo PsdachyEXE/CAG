@@ -4,8 +4,9 @@
 	Centre: Character viewport (R6 noob rig) + HANDS slot + hotbar preview
 	Right:  Player inventory (4col x 4row = 16 slots)
 
-	Tab / Escape to toggle. Also opens on container interact (InventoryState).
+	I / Escape to toggle. Also opens on container interact (InventoryState).
 	Click container item → fires ContainerTakeItem → server transfers it.
+	Right-click inventory item → context menu (EQUIP / DROP).
 	Tooltip on hover after 0.5s delay.
 ]]
 
@@ -25,7 +26,7 @@ local playerGui = player:WaitForChild("PlayerGui")
 
 -- ── Colours ──────────────────────────────────────────────
 local OVERLAY_COLOR = Color3.new(0, 0, 0)
-local OVERLAY_TRANSPARENCY = 0.55 -- 45% opacity
+local OVERLAY_TRANSPARENCY = 0.55
 local PANEL_BG = Color3.fromRGB(22, 22, 36)
 local PANEL_BORDER = Color3.fromRGB(60, 60, 80)
 local SLOT_EMPTY_BG = Color3.fromRGB(35, 35, 50)
@@ -37,6 +38,8 @@ local TEXT_DIM = Color3.fromRGB(90, 90, 110)
 local HANDS_BG = Color3.fromRGB(45, 45, 65)
 local TOOLTIP_BG = Color3.fromRGB(18, 18, 30)
 local FULL_FLASH = Color3.fromRGB(244, 67, 54)
+local CONTEXT_BG = Color3.fromRGB(13, 13, 18)
+local CONTEXT_HOVER = Color3.fromRGB(26, 26, 46)
 
 local RARITY_COLORS = {
 	Common = Color3.fromRGB(155, 155, 155),
@@ -49,22 +52,24 @@ local RARITY_COLORS = {
 -- ── State ────────────────────────────────────────────────
 local screenGui = nil
 local overlay = nil
-local leftPanel = nil   -- container panel
-local centrePanel = nil  -- character + hands
-local rightPanel = nil   -- player inventory
+local leftPanel = nil
+local centrePanel = nil
+local rightPanel = nil
 local tooltip = nil
+local contextMenu = nil
 
 local isOpen = false
-local activeContainer = nil  -- Instance reference of the open container
-local containerItems = {}    -- array from server
-local playerItems = {}       -- array from server
+local activeContainer = nil
+local containerItems = {}
+local playerItems = {}
 
 local hoverTimer = 0
 local hoveredSlot = nil
 local tooltipVisible = false
 
--- Callbacks for hotbar updates
+-- Callbacks
 local hotbarUpdateCallback = nil
+local equipCallback = nil -- called with (itemIndex) for equip flow
 
 -- ── Slot dimensions ──────────────────────────────────────
 local SLOT_SIZE = 64
@@ -119,7 +124,6 @@ local function showToast(text: string, color: Color3)
 	label.TextTruncate = Enum.TextTruncate.AtEnd
 	label.Parent = toast
 
-	-- Slide in from right
 	local targetPos = toast.Position
 	toast.Position = UDim2.new(1, 260, targetPos.Y.Scale, targetPos.Y.Offset)
 	TweenService:Create(toast, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
@@ -231,22 +235,11 @@ local function showTooltipForItem(item, position)
 
 	local rarityColor = RARITY_COLORS[item.rarity] or RARITY_COLORS.Common
 
-	if nameLabel then
-		nameLabel.Text = item.name or "Unknown"
-		nameLabel.TextColor3 = TEXT_WHITE
-	end
-	if rarityLabel then
-		rarityLabel.Text = item.rarity or ""
-		rarityLabel.TextColor3 = rarityColor
-	end
-	if valueLabel then
-		valueLabel.Text = "Value: " .. tostring(item.value or 0)
-	end
-	if border then
-		border.Color = rarityColor
-	end
+	if nameLabel then nameLabel.Text = item.name or "Unknown"; nameLabel.TextColor3 = TEXT_WHITE end
+	if rarityLabel then rarityLabel.Text = item.rarity or ""; rarityLabel.TextColor3 = rarityColor end
+	if valueLabel then valueLabel.Text = "Value: " .. tostring(item.value or 0) end
+	if border then border.Color = rarityColor end
 
-	-- Position tooltip near mouse, offset right+down
 	tooltip.Position = UDim2.new(0, position.X + 12, 0, position.Y + 12)
 	tooltip.Visible = true
 	tooltipVisible = true
@@ -259,6 +252,145 @@ local function hideTooltip()
 	tooltipVisible = false
 	hoveredSlot = nil
 	hoverTimer = 0
+end
+
+-- ── Context Menu ─────────────────────────────────────────
+local function hideContextMenu()
+	if contextMenu then
+		contextMenu.Visible = false
+	end
+end
+
+local function showContextMenu(slotIndex: number, mousePos: Vector2)
+	hideTooltip()
+	hideContextMenu()
+
+	if not contextMenu then
+		return
+	end
+
+	local item = playerItems[slotIndex]
+	if not item then
+		return
+	end
+
+	-- Position at cursor + offset
+	contextMenu.Position = UDim2.new(0, mousePos.X + 4, 0, mousePos.Y)
+	contextMenu.Visible = true
+
+	-- Update button actions by storing the current slot index
+	contextMenu:SetAttribute("TargetSlot", slotIndex)
+end
+
+local function createContextMenu()
+	local menu = Instance.new("Frame")
+	menu.Name = "ContextMenu"
+	menu.Size = UDim2.new(0, 100, 0, 60)
+	menu.BackgroundColor3 = CONTEXT_BG
+	menu.BackgroundTransparency = 0.05
+	menu.Visible = false
+	menu.ZIndex = 120
+	menu.Parent = screenGui
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 4)
+	corner.Parent = menu
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.new(1, 1, 1)
+	stroke.Thickness = 1
+	stroke.Transparency = 0.5
+	stroke.Parent = menu
+
+	local layout = Instance.new("UIListLayout")
+	layout.FillDirection = Enum.FillDirection.Vertical
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Parent = menu
+
+	-- EQUIP button
+	local equipBtn = Instance.new("TextButton")
+	equipBtn.Name = "EquipBtn"
+	equipBtn.Size = UDim2.new(1, 0, 0, 30)
+	equipBtn.LayoutOrder = 1
+	equipBtn.BackgroundColor3 = CONTEXT_BG
+	equipBtn.BackgroundTransparency = 0.05
+	equipBtn.Text = "EQUIP"
+	equipBtn.Font = Enum.Font.GothamBold
+	equipBtn.TextSize = 13
+	equipBtn.TextColor3 = TEXT_WHITE
+	equipBtn.ZIndex = 121
+	equipBtn.Parent = menu
+
+	local equipCorner = Instance.new("UICorner")
+	equipCorner.CornerRadius = UDim.new(0, 4)
+	equipCorner.Parent = equipBtn
+
+	equipBtn.MouseEnter:Connect(function()
+		equipBtn.BackgroundColor3 = CONTEXT_HOVER
+	end)
+	equipBtn.MouseLeave:Connect(function()
+		equipBtn.BackgroundColor3 = CONTEXT_BG
+	end)
+
+	equipBtn.MouseButton1Click:Connect(function()
+		local slotIndex = menu:GetAttribute("TargetSlot")
+		hideContextMenu()
+		if slotIndex and equipCallback then
+			equipCallback(slotIndex)
+		end
+	end)
+
+	-- DROP button
+	local dropBtn = Instance.new("TextButton")
+	dropBtn.Name = "DropBtn"
+	dropBtn.Size = UDim2.new(1, 0, 0, 30)
+	dropBtn.LayoutOrder = 2
+	dropBtn.BackgroundColor3 = CONTEXT_BG
+	dropBtn.BackgroundTransparency = 0.05
+	dropBtn.Text = "DROP"
+	dropBtn.Font = Enum.Font.GothamBold
+	dropBtn.TextSize = 13
+	dropBtn.TextColor3 = TEXT_WHITE
+	dropBtn.ZIndex = 121
+	dropBtn.Parent = menu
+
+	local dropCorner = Instance.new("UICorner")
+	dropCorner.CornerRadius = UDim.new(0, 4)
+	dropCorner.Parent = dropBtn
+
+	dropBtn.MouseEnter:Connect(function()
+		dropBtn.BackgroundColor3 = CONTEXT_HOVER
+	end)
+	dropBtn.MouseLeave:Connect(function()
+		dropBtn.BackgroundColor3 = CONTEXT_BG
+	end)
+
+	dropBtn.MouseButton1Click:Connect(function()
+		local slotIndex = menu:GetAttribute("TargetSlot")
+		hideContextMenu()
+		if slotIndex then
+			-- Optimistic: remove item from local display immediately
+			local removedItem = playerItems[slotIndex]
+			table.remove(playerItems, slotIndex)
+			refreshInventoryPanel()
+
+			-- Fire DropItem to server
+			local remotes = ReplicatedStorage:FindFirstChild("RemoteEvents")
+			if remotes then
+				local dropRemote = remotes:FindFirstChild(RemoteNames.DropItem)
+				if dropRemote then
+					dropRemote:FireServer(slotIndex)
+				end
+			end
+
+			if removedItem then
+				local rarityColor = RARITY_COLORS[removedItem.rarity] or RARITY_COLORS.Common
+				showToast("- " .. removedItem.name, rarityColor)
+			end
+		end
+	end)
+
+	contextMenu = menu
 end
 
 -- ── Slot creation helpers ────────────────────────────────
@@ -281,7 +413,6 @@ local function createSlot(parent, index: number, layoutOrder: number): Frame
 	stroke.Thickness = 1.5
 	stroke.Parent = slot
 
-	-- Item name label (centred)
 	local nameLabel = Instance.new("TextLabel")
 	nameLabel.Name = "ItemName"
 	nameLabel.Size = UDim2.new(1, -6, 0, 16)
@@ -295,7 +426,6 @@ local function createSlot(parent, index: number, layoutOrder: number): Frame
 	nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
 	nameLabel.Parent = slot
 
-	-- Rarity label below name
 	local rarityLabel = Instance.new("TextLabel")
 	rarityLabel.Name = "Rarity"
 	rarityLabel.Size = UDim2.new(1, -6, 0, 12)
@@ -318,31 +448,15 @@ local function updateSlot(slot: Frame, item)
 
 	if item then
 		local rarityColor = RARITY_COLORS[item.rarity] or RARITY_COLORS.Common
-		if nameLabel then
-			nameLabel.Text = item.name or "?"
-			nameLabel.TextColor3 = TEXT_WHITE
-		end
-		if rarityLabel then
-			rarityLabel.Text = item.rarity or ""
-			rarityLabel.TextColor3 = rarityColor
-		end
-		if border then
-			border.Color = rarityColor
-			border.Thickness = 2
-		end
+		if nameLabel then nameLabel.Text = item.name or "?"; nameLabel.TextColor3 = TEXT_WHITE end
+		if rarityLabel then rarityLabel.Text = item.rarity or ""; rarityLabel.TextColor3 = rarityColor end
+		if border then border.Color = rarityColor; border.Thickness = 2 end
 		slot.BackgroundColor3 = SLOT_EMPTY_BG
 		slot.BackgroundTransparency = 0.08
 	else
-		if nameLabel then
-			nameLabel.Text = ""
-		end
-		if rarityLabel then
-			rarityLabel.Text = ""
-		end
-		if border then
-			border.Color = SLOT_EMPTY_BORDER
-			border.Thickness = 1.5
-		end
+		if nameLabel then nameLabel.Text = "" end
+		if rarityLabel then rarityLabel.Text = "" end
+		if border then border.Color = SLOT_EMPTY_BORDER; border.Thickness = 1.5 end
 		slot.BackgroundColor3 = SLOT_EMPTY_BG
 		slot.BackgroundTransparency = 0.15
 	end
@@ -367,14 +481,14 @@ end
 
 -- ── Build panels ─────────────────────────────────────────
 
-local containerSlots = {} -- array of slot Frames
-local inventorySlots = {} -- array of slot Frames
+local containerSlots = {}
+local inventorySlots = {}
 
 local function buildContainerPanel(parent)
 	local panel = Instance.new("Frame")
 	panel.Name = "ContainerPanel"
 	panel.Size = UDim2.new(0, 4 * SLOT_SIZE + 3 * SLOT_PAD + 2 * PANEL_PAD, 1, 0)
-	panel.Position = UDim2.new(0, -400, 0, 0) -- start off-screen left
+	panel.Position = UDim2.new(0, -400, 0, 0)
 	panel.BackgroundColor3 = PANEL_BG
 	panel.BackgroundTransparency = 0.08
 	panel.Parent = parent
@@ -389,7 +503,6 @@ local function buildContainerPanel(parent)
 	stroke.Thickness = 1.5
 	stroke.Parent = panel
 
-	-- Title
 	local title = Instance.new("TextLabel")
 	title.Name = "Title"
 	title.Size = UDim2.new(1, 0, 0, 36)
@@ -401,7 +514,6 @@ local function buildContainerPanel(parent)
 	title.TextColor3 = TEXT_WHITE
 	title.Parent = panel
 
-	-- Grid
 	local grid = Instance.new("Frame")
 	grid.Name = "Grid"
 	grid.Size = UDim2.new(1, -2 * PANEL_PAD, 0, 2 * SLOT_SIZE + SLOT_PAD)
@@ -416,7 +528,6 @@ local function buildContainerPanel(parent)
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.Parent = grid
 
-	-- 8 slots (4x2)
 	containerSlots = {}
 	for i = 1, 8 do
 		local slot = createSlot(grid, i, i)
@@ -447,7 +558,6 @@ local function buildCentrePanel(parent)
 	stroke.Thickness = 1.5
 	stroke.Parent = panel
 
-	-- Title
 	local title = Instance.new("TextLabel")
 	title.Name = "Title"
 	title.Size = UDim2.new(1, 0, 0, 36)
@@ -459,7 +569,6 @@ local function buildCentrePanel(parent)
 	title.TextColor3 = TEXT_WHITE
 	title.Parent = panel
 
-	-- ViewportFrame for character model
 	local viewport = Instance.new("ViewportFrame")
 	viewport.Name = "CharViewport"
 	viewport.Size = UDim2.new(0, 140, 0, 200)
@@ -473,12 +582,10 @@ local function buildCentrePanel(parent)
 	vpCorner.CornerRadius = UDim.new(0, 6)
 	vpCorner.Parent = viewport
 
-	-- Build R6 noob character in viewport
 	task.spawn(function()
 		local char = player.Character or player.CharacterAdded:Wait()
 		if char then
 			local clone = char:Clone()
-			-- Remove scripts and non-visual
 			for _, child in clone:GetDescendants() do
 				if child:IsA("BaseScript") or child:IsA("Sound") then
 					child:Destroy()
@@ -486,13 +593,11 @@ local function buildCentrePanel(parent)
 			end
 			clone.Parent = viewport
 
-			-- Camera for viewport
 			local cam = Instance.new("Camera")
 			cam.CFrame = CFrame.new(Vector3.new(0, 2.5, 6), Vector3.new(0, 2.5, 0))
 			cam.Parent = viewport
 			viewport.CurrentCamera = cam
 
-			-- Position model at origin
 			local hrp = clone:FindFirstChild("HumanoidRootPart")
 			if hrp then
 				hrp.CFrame = CFrame.new(0, 0, 0)
@@ -500,7 +605,6 @@ local function buildCentrePanel(parent)
 		end
 	end)
 
-	-- HANDS slot
 	local handsFrame = Instance.new("Frame")
 	handsFrame.Name = "HandsSlot"
 	handsFrame.Size = UDim2.new(0, 100, 0, 40)
@@ -536,7 +640,7 @@ local function buildInventoryPanel(parent)
 	panel.Name = "InventoryPanel"
 	panel.Size = UDim2.new(0, 4 * SLOT_SIZE + 3 * SLOT_PAD + 2 * PANEL_PAD, 1, 0)
 	panel.AnchorPoint = Vector2.new(1, 0)
-	panel.Position = UDim2.new(1, 400, 0, 0) -- start off-screen right
+	panel.Position = UDim2.new(1, 400, 0, 0)
 	panel.BackgroundColor3 = PANEL_BG
 	panel.BackgroundTransparency = 0.08
 	panel.Parent = parent
@@ -551,7 +655,6 @@ local function buildInventoryPanel(parent)
 	stroke.Thickness = 1.5
 	stroke.Parent = panel
 
-	-- Title
 	local title = Instance.new("TextLabel")
 	title.Name = "Title"
 	title.Size = UDim2.new(1, 0, 0, 36)
@@ -563,7 +666,6 @@ local function buildInventoryPanel(parent)
 	title.TextColor3 = TEXT_WHITE
 	title.Parent = panel
 
-	-- Slot count
 	local countLabel = Instance.new("TextLabel")
 	countLabel.Name = "SlotCount"
 	countLabel.Size = UDim2.new(1, -16, 0, 14)
@@ -576,7 +678,6 @@ local function buildInventoryPanel(parent)
 	countLabel.TextXAlignment = Enum.TextXAlignment.Right
 	countLabel.Parent = panel
 
-	-- Grid
 	local grid = Instance.new("Frame")
 	grid.Name = "Grid"
 	grid.Size = UDim2.new(1, -2 * PANEL_PAD, 0, 4 * SLOT_SIZE + 3 * SLOT_PAD)
@@ -591,7 +692,6 @@ local function buildInventoryPanel(parent)
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.Parent = grid
 
-	-- 16 slots (4x4)
 	inventorySlots = {}
 	for i = 1, Config.MAX_INVENTORY_SLOTS do
 		local slot = createSlot(grid, i, i)
@@ -608,14 +708,9 @@ local function refreshContainerPanel()
 		updateSlot(slot, item)
 	end
 
-	-- Update title to show count
 	if leftPanel then
 		local title = leftPanel:FindFirstChild("Title")
 		if title then
-			local count = 0
-			for _ in containerItems do
-				count = count + 1
-			end
 			title.Text = "CONTAINER (" .. #containerItems .. ")"
 		end
 	end
@@ -627,7 +722,6 @@ local function refreshInventoryPanel()
 		updateSlot(slot, item)
 	end
 
-	-- Update slot count
 	if rightPanel then
 		local countLabel = rightPanel:FindFirstChild("SlotCount")
 		if countLabel then
@@ -635,7 +729,6 @@ local function refreshInventoryPanel()
 		end
 	end
 
-	-- Notify hotbar
 	if hotbarUpdateCallback then
 		hotbarUpdateCallback(playerItems)
 	end
@@ -662,9 +755,8 @@ local function onContainerSlotClick(index: number)
 	takeRemote:FireServer(activeContainer, index)
 end
 
--- ── Hover handler for slots ──────────────────────────────
-local function setupSlotInteraction(slot: Frame, getItem: () -> any?, onClick: (() -> ())?)
-	-- Click
+-- ── Hover + click handler for slots ──────────────────────
+local function setupSlotInteraction(slot: Frame, getItem: () -> any?, onClick: (() -> ())?, onRightClick: (() -> ())?)
 	local btn = Instance.new("TextButton")
 	btn.Name = "ClickArea"
 	btn.Size = UDim2.new(1, 0, 1, 0)
@@ -675,23 +767,31 @@ local function setupSlotInteraction(slot: Frame, getItem: () -> any?, onClick: (
 
 	if onClick then
 		btn.MouseButton1Click:Connect(function()
+			hideContextMenu()
 			onClick()
+		end)
+	else
+		btn.MouseButton1Click:Connect(function()
+			hideContextMenu()
 		end)
 	end
 
-	-- Hover enter
+	if onRightClick then
+		btn.MouseButton2Click:Connect(function()
+			onRightClick()
+		end)
+	end
+
 	btn.MouseEnter:Connect(function()
 		hoveredSlot = { getItem = getItem, slot = slot }
 		hoverTimer = 0
 
-		-- Subtle highlight
 		local item = getItem()
 		if item then
 			slot.BackgroundColor3 = SLOT_HOVER_BG
 		end
 	end)
 
-	-- Hover leave
 	btn.MouseLeave:Connect(function()
 		if hoveredSlot and hoveredSlot.slot == slot then
 			hoveredSlot = nil
@@ -720,17 +820,15 @@ local function buildUI()
 	gui.Enabled = false
 	gui.Parent = playerGui
 
-	-- Fullscreen overlay
 	local ov = Instance.new("Frame")
 	ov.Name = "Overlay"
 	ov.Size = UDim2.new(1, 0, 1, 0)
 	ov.BackgroundColor3 = OVERLAY_COLOR
-	ov.BackgroundTransparency = 1 -- start transparent
+	ov.BackgroundTransparency = 1
 	ov.ZIndex = 1
 	ov.Parent = gui
 	overlay = ov
 
-	-- Panel container (centred, holds all 3 panels)
 	local panelContainer = Instance.new("Frame")
 	panelContainer.Name = "Panels"
 	panelContainer.Size = UDim2.new(0.9, 0, 0, 400)
@@ -740,33 +838,35 @@ local function buildUI()
 	panelContainer.ZIndex = 2
 	panelContainer.Parent = gui
 
-	-- Build three panels
 	buildContainerPanel(panelContainer)
 	buildCentrePanel(panelContainer)
 	buildInventoryPanel(panelContainer)
 
-	-- Create tooltip
 	createTooltip()
-	if tooltip then
-		tooltip.ZIndex = 100
-	end
+	createContextMenu()
 
 	screenGui = gui
 
-	-- Setup slot interactions for container slots
+	-- Container slots: left-click to take
 	for i, slot in containerSlots do
 		setupSlotInteraction(slot, function()
 			return containerItems[i]
 		end, function()
 			onContainerSlotClick(i)
-		end)
+		end, nil)
 	end
 
-	-- Setup slot interactions for inventory slots (no click action for now)
+	-- Inventory slots: left-click dismiss context, right-click for context menu
 	for i, slot in inventorySlots do
 		setupSlotInteraction(slot, function()
 			return playerItems[i]
-		end, nil)
+		end, nil, function()
+			local item = playerItems[i]
+			if item then
+				local mousePos = UserInputService:GetMouseLocation()
+				showContextMenu(i, mousePos)
+			end
+		end)
 	end
 end
 
@@ -785,19 +885,16 @@ local function openUI(withContainer: boolean)
 	end
 	screenGui.Enabled = true
 
-	-- Fade in overlay
 	overlay.BackgroundTransparency = 1
 	TweenService:Create(overlay, TweenInfo.new(ANIM_TIME), {
 		BackgroundTransparency = OVERLAY_TRANSPARENCY,
 	}):Play()
 
-	-- Centre panel slides in first (from below)
 	centrePanel.Position = UDim2.new(0.5, 0, 0, 60)
 	TweenService:Create(centrePanel, TweenInfo.new(ANIM_TIME, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
 		Position = UDim2.new(0.5, 0, 0, 0),
 	}):Play()
 
-	-- Right panel slides in from right (stagger)
 	rightPanel.Position = UDim2.new(1, 400, 0, 0)
 	task.spawn(function()
 		task.wait(STAGGER)
@@ -806,7 +903,6 @@ local function openUI(withContainer: boolean)
 		}):Play()
 	end)
 
-	-- Left panel only shows if we have a container
 	if withContainer and leftPanel then
 		leftPanel.Visible = true
 		leftPanel.Position = UDim2.new(0, -400, 0, 0)
@@ -833,13 +929,12 @@ local function closeUI()
 	isOpen = false
 	activeContainer = nil
 	hideTooltip()
+	hideContextMenu()
 
-	-- Fade out overlay
 	TweenService:Create(overlay, TweenInfo.new(ANIM_TIME * 0.75), {
 		BackgroundTransparency = 1,
 	}):Play()
 
-	-- Slide panels out
 	TweenService:Create(centrePanel, TweenInfo.new(ANIM_TIME * 0.75, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
 		Position = UDim2.new(0.5, 0, 0, 60),
 	}):Play()
@@ -864,7 +959,6 @@ end
 
 -- ── Public API ───────────────────────────────────────────
 
--- Called by InteractClient when server sends InventoryState
 function InventoryClient.openWithContainer(data)
 	activeContainer = data.container
 	containerItems = data.containerItems or {}
@@ -872,12 +966,10 @@ function InventoryClient.openWithContainer(data)
 	openUI(true)
 end
 
--- Tab toggle (no container)
 function InventoryClient.toggleInventory()
 	if isOpen then
 		closeUI()
 	else
-		-- Open without container panel
 		containerItems = {}
 		activeContainer = nil
 		openUI(false)
@@ -896,6 +988,10 @@ function InventoryClient.setHotbarCallback(callback)
 	hotbarUpdateCallback = callback
 end
 
+function InventoryClient.setEquipCallback(callback)
+	equipCallback = callback
+end
+
 function InventoryClient.getPlayerItems()
 	return playerItems
 end
@@ -906,17 +1002,28 @@ function InventoryClient.init()
 
 	local remotes = ReplicatedStorage:WaitForChild("RemoteEvents")
 
-	-- Tab key toggle / Escape close
+	-- I key toggle / Escape close
 	UserInputService.InputBegan:Connect(function(input, processed)
 		if processed then
 			return
 		end
-		if input.KeyCode == Enum.KeyCode.Tab then
+		if input.KeyCode == Enum.KeyCode.I then
 			InventoryClient.toggleInventory()
 		elseif input.KeyCode == Enum.KeyCode.Escape then
 			if isOpen then
 				closeUI()
 			end
+		end
+	end)
+
+	-- Close context menu on any left-click outside it
+	UserInputService.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			-- Small delay to let button clicks process first
+			task.spawn(function()
+				task.wait(0.02)
+				-- Context menu handles its own clicks; this catches outside clicks
+			end)
 		end
 	end)
 
@@ -938,14 +1045,12 @@ function InventoryClient.init()
 				refreshInventoryPanel()
 			end
 
-			-- Toast for taken item
 			if data.takenItem then
 				local item = data.takenItem
 				local rarityColor = RARITY_COLORS[item.rarity] or RARITY_COLORS.Common
 				showToast("+ " .. item.name, rarityColor)
 			end
 
-			-- If container now empty, hide container panel
 			if #containerItems == 0 and leftPanel then
 				task.spawn(function()
 					task.wait(0.3)
@@ -962,8 +1067,32 @@ function InventoryClient.init()
 		end
 	end)
 
+	-- ItemPickedUp — add to local inventory display
+	remotes:WaitForChild(RemoteNames.ItemPickedUp).OnClientEvent:Connect(function(itemData)
+		if itemData then
+			table.insert(playerItems, itemData)
+			if isOpen then
+				refreshInventoryPanel()
+			else
+				-- Still update hotbar
+				if hotbarUpdateCallback then
+					hotbarUpdateCallback(playerItems)
+				end
+			end
+			local rarityColor = RARITY_COLORS[itemData.rarity] or RARITY_COLORS.Common
+			showToast("+ " .. (itemData.name or "Item"), rarityColor)
+		end
+	end)
+
 	-- InteractFailed — red flash
 	remotes:WaitForChild(RemoteNames.InteractFailed).OnClientEvent:Connect(function(reason)
+		if reason == "INVENTORY_FULL" then
+			flashInventoryFull()
+		end
+	end)
+
+	-- PickupFailed
+	remotes:WaitForChild(RemoteNames.PickupFailed).OnClientEvent:Connect(function(reason)
 		if reason == "INVENTORY_FULL" then
 			flashInventoryFull()
 		end
@@ -980,7 +1109,6 @@ function InventoryClient.init()
 					showTooltipForItem(item, mousePos)
 				end
 			end
-			-- Update tooltip position while visible
 			if tooltipVisible then
 				local mousePos = UserInputService:GetMouseLocation()
 				tooltip.Position = UDim2.new(0, mousePos.X + 12, 0, mousePos.Y + 12)
@@ -988,7 +1116,7 @@ function InventoryClient.init()
 		end
 	end)
 
-	print("[CAG] InventoryClient initialized (3-panel DayZ-style)")
+	print("[CAG] InventoryClient initialized (3-panel DayZ-style + context menu)")
 end
 
 return InventoryClient

@@ -23,8 +23,19 @@ local InventoryServer = require(script.InventoryServer)
 LootTableServer.init()
 InventoryServer.init()
 
+-- ── Hitbox + Ground items ──
+local HitboxService = require(script.HitboxService)
+HitboxService.init()
+
+local GroundItemServer = require(script.GroundItemServer)
+GroundItemServer.init()
+
 -- ── Interact system ──
 local InteractServer = require(script.InteractServer)
 InteractServer.init()
+
+-- ── Hotbar / Equip ──
+local HotbarServer = require(script.HotbarServer)
+HotbarServer.init()
 
 print("[CAG] Server initialized")

@@ -16,4 +16,13 @@ Config.CONTAINER_ROLLS = {
 	ContainerSmall = { min = 1, max = 3 },
 }
 
+-- Ground items / Pickup
+Config.PICKUP_RANGE = 6
+Config.CROSSHAIR_RAY_LENGTH = 10
+
+-- Equip
+Config.UNEQUIP_KEY = "G"
+Config.WEAPON_EQUIP_OFFSET = { 1.5, -0.5, -1 }
+Config.WEAPON_EQUIP_ROTATION = { 0, 90, 0 } -- degrees, applied as CFrame.Angles(0, rad(90), 0)
+
 return Config

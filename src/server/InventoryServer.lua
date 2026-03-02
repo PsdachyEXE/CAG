@@ -30,6 +30,11 @@ function InventoryServer.addItem(player: Player, item): boolean
 		type = item.type,
 		rarity = item.rarity,
 		value = item.value or 0,
+		icon = item.icon,
+		isWeapon = item.isWeapon or false,
+		category = item.category,
+		groundModel = item.groundModel,
+		handModel = item.handModel,
 	})
 
 	return true
