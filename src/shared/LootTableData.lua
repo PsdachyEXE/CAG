@@ -37,7 +37,7 @@ local LootTableData = {
 	-- AR
 	{ id = "wpn_ak47", name = "AK-47", type = "weapon_variant", rarity = "Uncommon", value = 40,
 	  icon = "\u{1F52B}", isWeapon = true, category = "AR",
-	  groundModel = "Weapons/AR/AK-47", handModel = "Weapons/AR/AK-47",
+	  groundModel = "Weapons/AR/AK-47/AK-47", handModel = "Weapons/AR/AK-47/AK-47",
 	  damage = 25, fireMode = {"auto", "semi"}, fireRate = 600,
 	  magSize = 30, reloadTime = 2.5, spread = 0.03, adsSpread = 0.008,
 	  recoilKick = 0.15, burstCount = nil, pellets = nil,
@@ -45,7 +45,7 @@ local LootTableData = {
 
 	{ id = "wpn_famas", name = "FAMAS", type = "weapon_variant", rarity = "Rare", value = 55,
 	  icon = "\u{1F52B}", isWeapon = true, category = "AR",
-	  groundModel = "Weapons/AR/FAMAS", handModel = "Weapons/AR/FAMAS",
+	  groundModel = "Weapons/AR/FAMAS/FAMAS", handModel = "Weapons/AR/FAMAS/FAMAS",
 	  damage = 25, fireMode = {"auto", "burst", "semi"}, fireRate = 900,
 	  magSize = 25, reloadTime = 2.3, spread = 0.025, adsSpread = 0.007,
 	  recoilKick = 0.1, burstCount = 3, pellets = nil,
@@ -53,7 +53,7 @@ local LootTableData = {
 
 	{ id = "wpn_combat_rifle", name = "Combat Rifle", type = "weapon_variant", rarity = "Rare", value = 60,
 	  icon = "\u{1F52B}", isWeapon = true, category = "AR",
-	  groundModel = "Weapons/AR/CombatRifle", handModel = "Weapons/AR/CombatRifle",
+	  groundModel = "Weapons/AR/CombatRifle/CombatRifle", handModel = "Weapons/AR/CombatRifle/CombatRifle",
 	  damage = 28, fireMode = {"auto", "semi"}, fireRate = 550,
 	  magSize = 30, reloadTime = 2.6, spread = 0.028, adsSpread = 0.007,
 	  recoilKick = 0.14, burstCount = nil, pellets = nil,
@@ -61,7 +61,7 @@ local LootTableData = {
 
 	{ id = "wpn_golden_auto", name = "Golden Auto", type = "weapon_variant", rarity = "Legendary", value = 200,
 	  icon = "\u{1F52B}", isWeapon = true, category = "AR",
-	  groundModel = "Weapons/AR/GoldenAuto", handModel = "Weapons/AR/GoldenAuto",
+	  groundModel = "Weapons/AR/GoldenAuto/GoldenAuto", handModel = "Weapons/AR/GoldenAuto/GoldenAuto",
 	  damage = 30, fireMode = {"auto", "semi"}, fireRate = 650,
 	  magSize = 35, reloadTime = 2.4, spread = 0.022, adsSpread = 0.005,
 	  recoilKick = 0.12, burstCount = nil, pellets = nil,
@@ -70,7 +70,7 @@ local LootTableData = {
 	-- PISTOL
 	{ id = "wpn_rusty_pistol", name = "Rusty Pistol", type = "weapon_variant", rarity = "Common", value = 15,
 	  icon = "\u{1F52B}", isWeapon = true, category = "PISTOL",
-	  groundModel = "Weapons/PISTOL/RustyPistol", handModel = "Weapons/PISTOL/RustyPistol",
+	  groundModel = "Weapons/PISTOL/RustyPistol/RustyPistol", handModel = "Weapons/PISTOL/RustyPistol/RustyPistol",
 	  damage = 8, fireMode = {"semi"}, fireRate = 350,
 	  magSize = 12, reloadTime = 1.6, spread = 0.03, adsSpread = 0.008,
 	  recoilKick = 0.1, burstCount = nil, pellets = nil,
@@ -78,7 +78,7 @@ local LootTableData = {
 
 	{ id = "wpn_glock", name = "Glock", type = "weapon_variant", rarity = "Common", value = 18,
 	  icon = "\u{1F52B}", isWeapon = true, category = "PISTOL",
-	  groundModel = "Weapons/PISTOL/Glock", handModel = "Weapons/PISTOL/Glock",
+	  groundModel = "Weapons/PISTOL/Glock/Glock", handModel = "Weapons/PISTOL/Glock/Glock",
 	  damage = 10, fireMode = {"semi"}, fireRate = 400,
 	  magSize = 15, reloadTime = 1.8, spread = 0.025, adsSpread = 0.006,
 	  recoilKick = 0.1, burstCount = nil, pellets = nil,
@@ -86,7 +86,7 @@ local LootTableData = {
 
 	{ id = "wpn_plasma_pistol", name = "Plasma Pistol", type = "weapon_variant", rarity = "Epic", value = 100,
 	  icon = "\u{1F52B}", isWeapon = true, category = "PISTOL",
-	  groundModel = "Weapons/PISTOL/PlasmaPistol", handModel = "Weapons/PISTOL/PlasmaPistol",
+	  groundModel = "Weapons/PISTOL/PlasmaPistol/PlasmaPistol", handModel = "Weapons/PISTOL/PlasmaPistol/PlasmaPistol",
 	  damage = 18, fireMode = {"semi"}, fireRate = 300,
 	  magSize = 10, reloadTime = 2.0, spread = 0.02, adsSpread = 0.004,
 	  recoilKick = 0.12, burstCount = nil, pellets = nil,
@@ -95,7 +95,7 @@ local LootTableData = {
 	-- SMG
 	{ id = "wpn_tactical_smg", name = "Tactical SMG", type = "weapon_variant", rarity = "Uncommon", value = 30,
 	  icon = "\u{1F52B}", isWeapon = true, category = "SMG",
-	  groundModel = "Weapons/SMG/TacticalSMG", handModel = "Weapons/SMG/TacticalSMG",
+	  groundModel = "Weapons/SMG/TacticalSMG/TacticalSMG", handModel = "Weapons/SMG/TacticalSMG/TacticalSMG",
 	  damage = 10, fireMode = {"auto", "semi"}, fireRate = 700,
 	  magSize = 25, reloadTime = 2.0, spread = 0.035, adsSpread = 0.01,
 	  recoilKick = 0.08, burstCount = nil, pellets = nil,
@@ -103,7 +103,7 @@ local LootTableData = {
 
 	{ id = "wpn_ump", name = "UMP", type = "weapon_variant", rarity = "Uncommon", value = 32,
 	  icon = "\u{1F52B}", isWeapon = true, category = "SMG",
-	  groundModel = "Weapons/SMG/UMP", handModel = "Weapons/SMG/UMP",
+	  groundModel = "Weapons/SMG/UMP/UMP", handModel = "Weapons/SMG/UMP/UMP",
 	  damage = 10, fireMode = {"auto", "semi"}, fireRate = 700,
 	  magSize = 25, reloadTime = 2.0, spread = 0.035, adsSpread = 0.01,
 	  recoilKick = 0.08, burstCount = nil, pellets = nil,
@@ -112,7 +112,7 @@ local LootTableData = {
 	-- SNIPER
 	{ id = "wpn_awm", name = "AWM", type = "weapon_variant", rarity = "Epic", value = 120,
 	  icon = "\u{1F52B}", isWeapon = true, category = "SNIPER",
-	  groundModel = "Weapons/SNIPER/AWM", handModel = "Weapons/SNIPER/AWM",
+	  groundModel = "Weapons/SNIPER/AWM/AWM", handModel = "Weapons/SNIPER/AWM/AWM",
 	  damage = 75, fireMode = {"semi"}, fireRate = 50,
 	  magSize = 5, reloadTime = 3.5, spread = 0.18, adsSpread = 0,
 	  recoilKick = 0.4, burstCount = nil, pellets = nil,
@@ -121,7 +121,7 @@ local LootTableData = {
 	-- SHOTGUN
 	{ id = "wpn_spas12", name = "SPAS-12", type = "weapon_variant", rarity = "Rare", value = 65,
 	  icon = "\u{1F52B}", isWeapon = true, category = "SHOTGUN",
-	  groundModel = "Weapons/SHOTGUN/SPAS12", handModel = "Weapons/SHOTGUN/SPAS12",
+	  groundModel = "Weapons/SHOTGUN/SPAS12/SPAS12", handModel = "Weapons/SHOTGUN/SPAS12/SPAS12",
 	  damage = 8, fireMode = {"semi"}, fireRate = 80,
 	  magSize = 8, reloadTime = 3.0, spread = 10, adsSpread = 5,
 	  recoilKick = 0.35, burstCount = nil, pellets = 8,
@@ -130,7 +130,7 @@ local LootTableData = {
 	-- MG
 	{ id = "wpn_m249", name = "M249", type = "weapon_variant", rarity = "Epic", value = 110,
 	  icon = "\u{1F52B}", isWeapon = true, category = "MG",
-	  groundModel = "Weapons/MG/M249", handModel = "Weapons/MG/M249",
+	  groundModel = "Weapons/MG/M249/M249", handModel = "Weapons/MG/M249/M249",
 	  damage = 17, fireMode = {"auto"}, fireRate = 750,
 	  magSize = 100, reloadTime = 4.5, spread = 0.05, adsSpread = 0.015,
 	  recoilKick = 0.12, burstCount = nil, pellets = nil,

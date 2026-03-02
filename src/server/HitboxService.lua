@@ -78,15 +78,24 @@ function HitboxService.init()
 
 	local count = 0
 
-	-- Iterate categories (AR, SMG, PISTOL, etc.)
+	-- Iterate categories (AR, SMG, PISTOL, etc.) → weapon folders → models
 	for _, category in weaponsFolder:GetChildren() do
 		if not category:IsA("Folder") then
 			continue
 		end
 
-		for _, weapon in category:GetChildren() do
-			if weapon:IsA("Model") or weapon:IsA("MeshPart") or weapon:IsA("BasePart") then
-				HitboxService.generateHitbox(weapon)
+		for _, weaponFolder in category:GetChildren() do
+			if weaponFolder:IsA("Folder") or weaponFolder:IsA("Model") then
+				-- New structure: category/weaponFolder/weaponModel
+				for _, weapon in weaponFolder:GetChildren() do
+					if weapon:IsA("Model") or weapon:IsA("MeshPart") or weapon:IsA("BasePart") then
+						HitboxService.generateHitbox(weapon)
+						count = count + 1
+					end
+				end
+			elseif weaponFolder:IsA("MeshPart") or weaponFolder:IsA("BasePart") then
+				-- Fallback: direct model in category (legacy)
+				HitboxService.generateHitbox(weaponFolder)
 				count = count + 1
 			end
 		end

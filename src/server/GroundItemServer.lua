@@ -73,12 +73,21 @@ end
 
 local function getItemDataFromModel(model)
 	-- Try to match by path relative to Weapons folder
+	-- Structure: Workspace/Weapons/{Category}/{WeaponFolder}/{WeaponModel}
 	local weaponsFolder = workspace:FindFirstChild("Weapons")
 	if not weaponsFolder then
 		return nil
 	end
 
-	-- Build path: category/name e.g. "AR/AK47"
+	-- Build path: Weapons/Category/Folder/Model e.g. "Weapons/AR/AK-47/AK-47"
+	local weaponFolder = model.Parent -- e.g. AK-47 folder
+	local category = weaponFolder and weaponFolder.Parent -- e.g. AR folder
+	if category and category.Parent == weaponsFolder then
+		local path = "Weapons/" .. category.Name .. "/" .. weaponFolder.Name .. "/" .. model.Name
+		return itemByGroundModel[path]
+	end
+
+	-- Fallback: try 2-level path (legacy or dropped items placed directly)
 	local parent = model.Parent
 	if parent and parent.Parent == weaponsFolder then
 		local path = "Weapons/" .. parent.Name .. "/" .. model.Name
