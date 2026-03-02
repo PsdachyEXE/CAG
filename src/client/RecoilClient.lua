@@ -1,9 +1,9 @@
 --[[
 	RecoilClient — applies camera recoil kick on weapon fire.
-	Each shot adds upward + random horizontal offset to camera.
-	Recovery tweens camera back after firing stops.
+	Each shot kicks camera up + random horizontal immediately.
+	Recovery lerps camera back after firing stops using exponential decay.
 	Recoil stacks on rapid fire, capped at 3x single kick.
-	Exports: applyRecoil(recoilKick), resetRecoil(), init
+	Exports: applyRecoil(recoilKick), resetRecoil(), getOffset(), init
 ]]
 
 local RunService = game:GetService("RunService")
@@ -16,12 +16,10 @@ local RecoilClient = {}
 local RECOVERY_TIME = Config.RECOIL_RECOVERY_TIME
 local KICK_RECOVERY = Config.CAMERA_KICK_RECOVERY
 
--- State
-local recoilOffsetX = 0 -- pitch (up/down)
-local recoilOffsetY = 0 -- yaw (left/right)
-local targetOffsetX = 0
-local targetOffsetY = 0
-local currentKickMax = 0 -- 3x cap based on current weapon
+-- Cumulative recoil offset applied to camera (in degrees)
+local recoilOffsetX = 0 -- pitch (up = negative)
+local recoilOffsetY = 0 -- yaw
+local currentKickMax = 0
 local isFiring = false
 local lastFireTick = 0
 
@@ -30,21 +28,28 @@ function RecoilClient.applyRecoil(recoilKick: number)
 	isFiring = true
 	lastFireTick = tick()
 
-	-- Upward kick (negative X = look up)
-	local kickX = -recoilKick
-	-- Random horizontal offset
-	local kickY = (math.random() - 0.5) * 0.6 * recoilKick
+	-- Kick amounts per spec
+	local kickX = -recoilKick                               -- upward
+	local kickY = (math.random() - 0.5) * recoilKick * 0.3 -- slight random yaw
 
-	targetOffsetX = math.max(targetOffsetX + kickX, -currentKickMax)
-	targetOffsetY = targetOffsetY + kickY
+	-- Clamp cumulative accumulation
+	local newOffsetX = math.max(recoilOffsetX + kickX, -currentKickMax)
+	local newOffsetY = math.clamp(recoilOffsetY + kickY, -currentKickMax, currentKickMax)
 
-	-- Clamp Y too
-	targetOffsetY = math.clamp(targetOffsetY, -currentKickMax, currentKickMax)
+	local deltaX = newOffsetX - recoilOffsetX
+	local deltaY = newOffsetY - recoilOffsetY
+
+	recoilOffsetX = newOffsetX
+	recoilOffsetY = newOffsetY
+
+	-- Apply kick immediately to camera
+	local cam = workspace.CurrentCamera
+	cam.CFrame = cam.CFrame * CFrame.Angles(math.rad(deltaX * 2), math.rad(deltaY), 0)
 end
 
 function RecoilClient.resetRecoil()
-	targetOffsetX = 0
-	targetOffsetY = 0
+	recoilOffsetX = 0
+	recoilOffsetY = 0
 	isFiring = false
 end
 
@@ -56,26 +61,31 @@ function RecoilClient.init()
 	RunService.RenderStepped:Connect(function(dt)
 		local timeSinceFire = tick() - lastFireTick
 
-		-- If we haven't fired recently, start recovery
 		if timeSinceFire > KICK_RECOVERY then
 			isFiring = false
 		end
 
-		if not isFiring then
-			-- Recover toward zero
-			local recoverySpeed = dt / math.max(RECOVERY_TIME, 0.01)
-			targetOffsetX = targetOffsetX + (0 - targetOffsetX) * math.min(recoverySpeed * 3, 1)
-			targetOffsetY = targetOffsetY + (0 - targetOffsetY) * math.min(recoverySpeed * 3, 1)
+		-- Recovery: exponential decay toward zero, apply delta to camera each frame
+		if not isFiring and (math.abs(recoilOffsetX) > 0.001 or math.abs(recoilOffsetY) > 0.001) then
+			local lerpFactor = 1 - math.exp(-dt / math.max(RECOVERY_TIME, 0.01))
+
+			local prevX = recoilOffsetX
+			local prevY = recoilOffsetY
+
+			recoilOffsetX = recoilOffsetX + (0 - recoilOffsetX) * lerpFactor
+			recoilOffsetY = recoilOffsetY + (0 - recoilOffsetY) * lerpFactor
 
 			-- Snap to zero when close
-			if math.abs(targetOffsetX) < 0.001 then targetOffsetX = 0 end
-			if math.abs(targetOffsetY) < 0.001 then targetOffsetY = 0 end
-		end
+			if math.abs(recoilOffsetX) < 0.001 then recoilOffsetX = 0 end
+			if math.abs(recoilOffsetY) < 0.001 then recoilOffsetY = 0 end
 
-		-- Smooth interpolation toward target
-		local lerpSpeed = math.min(dt * 20, 1)
-		recoilOffsetX = recoilOffsetX + (targetOffsetX - recoilOffsetX) * lerpSpeed
-		recoilOffsetY = recoilOffsetY + (targetOffsetY - recoilOffsetY) * lerpSpeed
+			-- Apply the recovery delta (negative of how much offset was reduced)
+			local deltaX = recoilOffsetX - prevX
+			local deltaY = recoilOffsetY - prevY
+
+			local cam = workspace.CurrentCamera
+			cam.CFrame = cam.CFrame * CFrame.Angles(math.rad(deltaX * 2), math.rad(deltaY), 0)
+		end
 	end)
 
 	print("[CAG] RecoilClient initialized")

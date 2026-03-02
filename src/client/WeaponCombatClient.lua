@@ -71,6 +71,27 @@ local function getWeaponStat(key, default)
 	return default
 end
 
+-- ── Mouse lock ───────────────────────────────────────────
+local function setMouseLocked(locked: boolean)
+	if locked then
+		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+		UserInputService.MouseIconEnabled = false
+	else
+		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+		UserInputService.MouseIconEnabled = true
+	end
+end
+
+function WeaponCombatClient.onInventoryOpened()
+	setMouseLocked(false)
+end
+
+function WeaponCombatClient.onInventoryClosed()
+	if currentWeapon then
+		setMouseLocked(true)
+	end
+end
+
 -- ── Fire logic ───────────────────────────────────────────
 local function calculateSpreadDirection(baseDir: Vector3, spreadAngle: number): Vector3
 	if spreadAngle <= 0 then
@@ -112,7 +133,13 @@ local function fireBullet()
 	-- Decrement ammo
 	currentAmmo = currentAmmo - 1
 
-	-- Calculate origin and direction
+	-- Apply recoil BEFORE reading direction: camera kicks first so
+	-- LookVector naturally reflects the kicked angle.
+	if RecoilClient then
+		RecoilClient.applyRecoil(getWeaponStat("recoilKick", 0.1))
+	end
+
+	-- Calculate origin and direction AFTER recoil kick
 	if not camera then
 		camera = workspace.CurrentCamera
 	end
@@ -145,11 +172,6 @@ local function fireBullet()
 		-- Single bullet
 		local direction = calculateSpreadDirection(baseDir, spreadVal)
 		fireRemote:FireServer(origin, direction, currentWeapon.id, isADS, nil)
-	end
-
-	-- Apply recoil
-	if RecoilClient then
-		RecoilClient.applyRecoil(getWeaponStat("recoilKick", 0.1))
 	end
 
 	-- Update HUD
@@ -322,6 +344,9 @@ function WeaponCombatClient.onWeaponEquipped(itemData)
 		return
 	end
 
+	-- Lock mouse whenever a weapon is equipped
+	setMouseLocked(true)
+
 	-- Swap delay if already had a weapon
 	if currentWeapon and not isSwapping then
 		isSwapping = true
@@ -369,6 +394,9 @@ function WeaponCombatClient.onWeaponUnequipped()
 	isADS = false
 	isFiringAuto = false
 	stopAutoFire()
+
+	-- Unlock mouse on unequip
+	setMouseLocked(false)
 
 	if RecoilClient then
 		RecoilClient.resetRecoil()
@@ -475,6 +503,23 @@ function WeaponCombatClient.init()
 			exitADS()
 		end
 	end)
+
+	-- Wire inventory open/close to mouse lock (BindableEvents if present)
+	local bindables = ReplicatedStorage:FindFirstChild("BindableEvents")
+	if bindables then
+		local invOpened = bindables:FindFirstChild("InventoryOpened")
+		if invOpened then
+			invOpened.Event:Connect(function()
+				WeaponCombatClient.onInventoryOpened()
+			end)
+		end
+		local invClosed = bindables:FindFirstChild("InventoryClosed")
+		if invClosed then
+			invClosed.Event:Connect(function()
+				WeaponCombatClient.onInventoryClosed()
+			end)
+		end
+	end
 
 	print("[CAG] WeaponCombatClient initialized")
 end

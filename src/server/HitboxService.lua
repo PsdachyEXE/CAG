@@ -87,8 +87,11 @@ function HitboxService.init()
 		for _, weaponFolder in category:GetChildren() do
 			if weaponFolder:IsA("Folder") or weaponFolder:IsA("Model") then
 				-- New structure: category/weaponFolder/weaponModel
+				-- Only tag the root weapon model: child whose name matches the folder name.
+				-- Sub-models (magazines, stocks, etc.) are skipped.
 				for _, weapon in weaponFolder:GetChildren() do
-					if weapon:IsA("Model") or weapon:IsA("MeshPart") or weapon:IsA("BasePart") then
+					if (weapon:IsA("Model") or weapon:IsA("MeshPart") or weapon:IsA("BasePart"))
+						and weapon.Name == weaponFolder.Name then
 						HitboxService.generateHitbox(weapon)
 						count = count + 1
 					end

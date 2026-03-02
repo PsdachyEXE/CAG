@@ -282,6 +282,17 @@ function InteractServer.init()
 		tagObject(obj)
 	end
 
+	-- Warn about any containers that are still untagged after auto-tagging.
+	-- This catches naming mismatches or containers added through unusual paths.
+	for _, model in workspace:GetDescendants() do
+		if (model.Name == "ContainerMedium" or
+			model.Name == "ContainerLarge" or
+			model.Name == "ContainerSmall") and
+			not CollectionService:HasTag(model, CONTAINER_TAG) then
+			warn("CAG: Untagged container found: " .. model:GetFullName())
+		end
+	end
+
 	-- Watch for new objects
 	workspace.DescendantAdded:Connect(function(obj)
 		tagObject(obj)
