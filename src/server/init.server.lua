@@ -38,4 +38,8 @@ InteractServer.init()
 local HotbarServer = require(script.HotbarServer)
 HotbarServer.init()
 
+-- ── Combat ──
+local WeaponCombatServer = require(script.WeaponCombatServer)
+WeaponCombatServer.init()
+
 print("[CAG] Server initialized")

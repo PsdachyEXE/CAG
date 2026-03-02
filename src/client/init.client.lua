@@ -1,6 +1,7 @@
 --[[
 	Client bootstrap — initializes all client-side systems.
 	Init order: InteractClient → InventoryClient → HotbarClient → GroundItemClient
+	           → RecoilClient → ViewModelClient → HUDClient → WeaponCombatClient
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -9,6 +10,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 ReplicatedStorage:WaitForChild("RemoteEvents")
 ReplicatedStorage:WaitForChild("Shared")
 
+-- ── Core systems ──
 local InteractClient = require(script.InteractClient)
 local InventoryClient = require(script.ui.InventoryClient)
 local HotbarClient = require(script.ui.HotbarClient)
@@ -35,6 +37,28 @@ end)
 
 -- Wire inventory open check for GroundItemClient (disable crosshair when inventory open)
 GroundItemClient.setInventoryOpenCheck(function()
+	return InventoryClient.isOpen()
+end)
+
+-- ── Combat systems ──
+local RecoilClient = require(script.RecoilClient)
+local ViewModelClient = require(script.ViewModelClient)
+local HUDClient = require(script.ui.HUDClient)
+local WeaponCombatClient = require(script.WeaponCombatClient)
+
+RecoilClient.init()
+ViewModelClient.init()
+HUDClient.init()
+WeaponCombatClient.init()
+
+-- Wire combat module dependencies
+ViewModelClient.setRecoilModule(RecoilClient)
+WeaponCombatClient.setViewModelClient(ViewModelClient)
+WeaponCombatClient.setRecoilClient(RecoilClient)
+WeaponCombatClient.setHUDClient(HUDClient)
+
+-- Wire inventory open check for WeaponCombatClient (disable firing when inventory open)
+WeaponCombatClient.setInventoryOpenCheck(function()
 	return InventoryClient.isOpen()
 end)
 
