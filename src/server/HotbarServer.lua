@@ -68,22 +68,23 @@ local function attachWeaponToCharacter(player, itemData)
 	-- Remove any existing equipped weapon
 	removeEquippedWeapon(player)
 
-	-- Find weapon model in Workspace/Weapons/
-	if not itemData.groundModel then
+	if not itemData.id then
 		return false
 	end
 
-	local parts = string.split(itemData.groundModel, "/")
-	local current = workspace
-	for _, part in parts do
-		current = current:FindFirstChild(part)
-		if not current then
-			return false
-		end
+	-- Clone from ReplicatedStorage.WeaponTemplates (survives pickup/destruction)
+	local templates = ReplicatedStorage:FindFirstChild("WeaponTemplates")
+	if not templates then
+		return false
+	end
+
+	local template = templates:FindFirstChild(itemData.id)
+	if not template then
+		return false
 	end
 
 	-- Clone the weapon
-	local weaponClone = current:Clone()
+	local weaponClone = template:Clone()
 	weaponClone.Name = "Equipped_" .. (itemData.name or "Weapon")
 
 	-- Unanchor all parts

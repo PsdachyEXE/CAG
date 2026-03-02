@@ -118,6 +118,11 @@ local function registerWorldWeapon(weapon)
 		return
 	end
 
+	-- Set ItemId attribute so clients can identify this weapon
+	if not weapon:GetAttribute("ItemId") then
+		weapon:SetAttribute("ItemId", itemData.id)
+	end
+
 	groundItems[weapon] = {
 		itemData = itemData,
 		state = "available",
@@ -132,22 +137,14 @@ function GroundItemServer.spawnGroundItem(itemData, position: Vector3)
 	local randomYRot = CFrame.Angles(0, math.rad(math.random(0, 360)), 0)
 	local spawnCF = CFrame.new(position) * randomYRot
 
-	if itemData.isWeapon and itemData.groundModel then
-		-- Clone weapon model from Workspace/Weapons/<path>
-		local weaponsFolder = workspace:FindFirstChild("Weapons")
-		if weaponsFolder then
-			local parts = string.split(itemData.groundModel, "/")
-			-- parts = {"Weapons", "AR", "AK47"}
-			local current = workspace
-			for _, part in parts do
-				current = current:FindFirstChild(part)
-				if not current then
-					break
-				end
-			end
+	if itemData.isWeapon and itemData.id then
+		-- Clone weapon from ReplicatedStorage.WeaponTemplates (survives pickup/destruction)
+		local templates = ReplicatedStorage:FindFirstChild("WeaponTemplates")
+		if templates then
+			local template = templates:FindFirstChild(itemData.id)
 
-			if current and current ~= workspace then
-				instance = current:Clone()
+			if template then
+				instance = template:Clone()
 				instance.Parent = workspace
 
 				-- Position at spawn point

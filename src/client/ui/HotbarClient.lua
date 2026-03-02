@@ -442,6 +442,51 @@ local function unequipCurrent()
 	end
 end
 
+-- ── Direct assign + equip (called from InventoryClient left-click) ───────
+-- Picks the first free slot for the item type, assigns it, then equips.
+function HotbarClient.directAssignAndEquip(inventoryIndex: number, item)
+	if not item then return end
+
+	local remotes = ReplicatedStorage:FindFirstChild("RemoteEvents")
+	if not remotes then return end
+
+	-- Choose target slot: weapons → 1-2, others → 3-HOTBAR_SLOTS
+	local targetSlot = nil
+	if item.isWeapon then
+		for i = 1, 2 do
+			if not hotbarItems[i] then targetSlot = i break end
+		end
+		if not targetSlot then targetSlot = 1 end
+	else
+		for i = 3, HOTBAR_SLOTS do
+			if not hotbarItems[i] then targetSlot = i break end
+		end
+		if not targetSlot then targetSlot = 3 end
+	end
+
+	-- Optimistic local update
+	hotbarItems[targetSlot] = item
+	equippedSlot = targetSlot
+	refreshSlots()
+
+	-- Tell server: assign inventory slot → hotbar slot
+	local assignRemote = remotes:FindFirstChild(RemoteNames.AssignHotbar)
+	if assignRemote then
+		assignRemote:FireServer(inventoryIndex, targetSlot)
+	end
+
+	-- Equip after a small delay so server processes assignment first
+	task.spawn(function()
+		task.wait(0.08)
+		local equipRemote = remotes:FindFirstChild(RemoteNames.EquipItem)
+		if equipRemote then
+			equipRemote:FireServer(targetSlot)
+		end
+	end)
+
+	showEquipToast(string.upper(item.name or "ITEM") .. " EQUIPPED")
+end
+
 -- ── Public ───────────────────────────────────────────────
 
 function HotbarClient.updateItems(items)

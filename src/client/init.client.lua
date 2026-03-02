@@ -6,14 +6,14 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
--- Wait for remotes to be created by server
+-- Wait for server to create remotes and shared modules
 ReplicatedStorage:WaitForChild("RemoteEvents")
 ReplicatedStorage:WaitForChild("Shared")
 
--- ── Core systems ──
-local InteractClient = require(script.InteractClient)
-local InventoryClient = require(script.ui.InventoryClient)
-local HotbarClient = require(script.ui.HotbarClient)
+-- ── Core systems ──────────────────────────────────────────
+local InteractClient   = require(script.InteractClient)
+local InventoryClient  = require(script.ui.InventoryClient)
+local HotbarClient     = require(script.ui.HotbarClient)
 local GroundItemClient = require(script.GroundItemClient)
 
 InteractClient.init()
@@ -21,29 +21,31 @@ InventoryClient.init()
 HotbarClient.init()
 GroundItemClient.init()
 
--- Wire hotbar to receive inventory updates from InventoryClient
+-- Hotbar UI stays in sync when inventory changes
 InventoryClient.setHotbarCallback(function(items)
 	HotbarClient.updateItems(items)
 end)
 
--- Wire equip callback: InventoryClient right-click "EQUIP" → HotbarClient assignment flow
-InventoryClient.setEquipCallback(function(inventoryIndex)
-	local items = InventoryClient.getPlayerItems()
-	local item = items[inventoryIndex]
-	if item then
-		HotbarClient.startAssignment(inventoryIndex, item.isWeapon or false)
-	end
+-- Left-click inventory slot → assign to first free hotbar slot + equip + close
+InventoryClient.setDirectEquipCallback(function(inventoryIndex, item)
+	HotbarClient.directAssignAndEquip(inventoryIndex, item)
+	InventoryClient.close()
 end)
 
--- Wire inventory open check for GroundItemClient (disable crosshair when inventory open)
+-- Left panel of inventory shows nearby ground items
+InventoryClient.setVicinityProvider(function()
+	return GroundItemClient.getNearbyItems()
+end)
+
+-- Disable crosshair pickup prompt while inventory is open
 GroundItemClient.setInventoryOpenCheck(function()
 	return InventoryClient.isOpen()
 end)
 
--- ── Combat systems ──
-local RecoilClient = require(script.RecoilClient)
-local ViewModelClient = require(script.ViewModelClient)
-local HUDClient = require(script.ui.HUDClient)
+-- ── Combat systems ────────────────────────────────────────
+local RecoilClient       = require(script.RecoilClient)
+local ViewModelClient    = require(script.ViewModelClient)
+local HUDClient          = require(script.ui.HUDClient)
 local WeaponCombatClient = require(script.WeaponCombatClient)
 
 RecoilClient.init()
@@ -57,9 +59,19 @@ WeaponCombatClient.setViewModelClient(ViewModelClient)
 WeaponCombatClient.setRecoilClient(RecoilClient)
 WeaponCombatClient.setHUDClient(HUDClient)
 
--- Wire inventory open check for WeaponCombatClient (disable firing when inventory open)
+-- Disable firing while inventory is open
 WeaponCombatClient.setInventoryOpenCheck(function()
 	return InventoryClient.isOpen()
+end)
+
+-- Inventory open  → release mouse lock so player can click inventory slots
+-- Inventory close → re-lock mouse if a weapon is still equipped
+InventoryClient.setOnOpenCallback(function()
+	WeaponCombatClient.onInventoryOpened()
+end)
+
+InventoryClient.setOnCloseCallback(function()
+	WeaponCombatClient.onInventoryClosed()
 end)
 
 print("[CAG] Client initialized")

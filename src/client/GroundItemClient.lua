@@ -271,6 +271,33 @@ local function crosshairRaycast()
 end
 
 -- ── Public ───────────────────────────────────────────────
+
+-- Returns ground items within 2× pickup range as
+-- { instance, itemData, dist } sorted closest-first.
+-- Used by InventoryClient to populate the VICINITY panel.
+function GroundItemClient.getNearbyItems()
+	local character = player.Character
+	if not character then return {} end
+	local hrp = character:FindFirstChild("HumanoidRootPart")
+	if not hrp then return {} end
+
+	local RANGE = (Config.PICKUP_RANGE or 6) * 2
+	local nearby = {}
+
+	for instance, itemData in groundItemRegistry do
+		local part = getItemPart(instance)
+		if part and part.Parent then
+			local dist = (hrp.Position - part.Position).Magnitude
+			if dist <= RANGE then
+				table.insert(nearby, { instance = instance, itemData = itemData, dist = dist })
+			end
+		end
+	end
+
+	table.sort(nearby, function(a, b) return a.dist < b.dist end)
+	return nearby
+end
+
 function GroundItemClient.init()
 	createPrompt()
 

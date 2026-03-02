@@ -88,21 +88,22 @@ end
 local function loadWeapon(itemData)
 	clearWeapon()
 
-	if not itemData or not itemData.handModel then
+	if not itemData or not itemData.id then
 		return
 	end
 
-	-- Find weapon model in workspace
-	local parts = string.split(itemData.handModel, "/")
-	local current = workspace
-	for _, part in parts do
-		current = current:FindFirstChild(part)
-		if not current then
-			return
-		end
+	-- Clone from ReplicatedStorage.WeaponTemplates (survives pickup/destruction)
+	local templates = ReplicatedStorage:FindFirstChild("WeaponTemplates")
+	if not templates then
+		return
 	end
 
-	local clone = current:Clone()
+	local template = templates:FindFirstChild(itemData.id)
+	if not template then
+		return
+	end
+
+	local clone = template:Clone()
 	clone.Name = "VM_" .. (itemData.name or "Weapon")
 
 	-- Configure all parts
